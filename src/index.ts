@@ -1,7 +1,11 @@
 import { getConfig } from './config/env.js';
 import { getLogger } from './utils/logger.js';
+import { initSentry } from './utils/sentry.js';
 import { createDatabase, closeDatabase } from './database/connection.js';
 import { runMigrations } from './database/migrator.js';
+import { connectMongo, closeMongo } from './database/mongo/connection.js';
+import { MongoKnowledgeRepository } from './database/mongo/knowledge.mongo.js';
+import { MongoCaseRepository } from './database/mongo/case.mongo.js';
 import { GuildConfigRepository } from './database/repositories/guild-config.repo.js';
 import { CaseRepository } from './database/repositories/case.repo.js';
 import { EvidenceRepository } from './database/repositories/evidence.repo.js';
@@ -10,8 +14,10 @@ import { IncidentRepository } from './database/repositories/incident.repo.js';
 import { GitHubRepository } from './database/repositories/github.repo.js';
 import { AuditRepository } from './database/repositories/audit.repo.js';
 import { OllamaProvider } from './integrations/model/ollama.provider.js';
+import { createModelProvider } from './integrations/model/factory.js';
 import { SafeFetcher } from './integrations/web/safe-fetcher.js';
 import { GitHubClient } from './integrations/github/github.client.js';
+import { SerpApiClient } from './integrations/web/serpapi.client.js';
 import { MemoryRetriever } from './memory/retriever.js';
 import { LearningPipeline } from './memory/learner.js';
 import { ToolRegistry } from './agent/tools.js';
@@ -30,12 +36,32 @@ export async function bootstrap() {
 
   const config = getConfig();
 
-  // 1. Initialize SQLite Database & Migrations
+  // 1. Initialize Sentry Agent Tracing (if configured)
+  if (config.SENTRY_DSN) {
+    initSentry(config.SENTRY_DSN);
+  }
+
+  // 2. Initialize Database (Dual: SQLite / MongoDB Atlas)
+  let mongoDbInstance = null;
+  if (config.DATABASE_PROVIDER === 'mongodb' || config.MONGODB_URI) {
+    try {
+      const { db: mDb } = await connectMongo({
+        uri: config.MONGODB_URI,
+        dbName: config.MONGODB_DB_NAME,
+      });
+      mongoDbInstance = mDb;
+      logger.info({ provider: 'MongoDB Atlas', db: config.MONGODB_DB_NAME }, 'Using MongoDB Atlas database backend');
+    } catch (mongoErr) {
+      logger.warn({ mongoErr }, 'Could not connect to MongoDB Atlas; falling back to local SQLite engine');
+    }
+  }
+
+  // Always initialize SQLite engine for reliable local storage, FTS5, and fallback
   const db = createDatabase({ path: config.DATABASE_PATH });
   const migrationsApplied = runMigrations(db);
-  logger.info({ migrationsApplied }, 'Database initialized and schema verified');
+  logger.info({ migrationsApplied, path: config.DATABASE_PATH }, 'SQLite database engine verified');
 
-  // 2. Initialize Repositories
+  // 3. Initialize Repositories
   const guildRepo = new GuildConfigRepository(db);
   const caseRepo = new CaseRepository(db);
   const evidenceRepo = new EvidenceRepository(db);
@@ -44,35 +70,42 @@ export async function bootstrap() {
   const githubRepo = new GitHubRepository(db);
   const auditRepo = new AuditRepository(db);
 
-  // 3. Initialize Model Provider & Health Check
-  const modelProvider = new OllamaProvider({
-    baseUrl: config.OLLAMA_BASE_URL,
-    model: config.OLLAMA_MODEL,
-    embeddingModel: config.OLLAMA_EMBEDDING_MODEL,
-    defaultTimeoutMs: config.OLLAMA_TIMEOUT_MS,
-  });
+  // If MongoDB is connected, initialize Mongo repositories for dual persistence and Atlas Vector Search
+  let mongoKnowledgeRepo: MongoKnowledgeRepository | null = null;
+  let mongoCaseRepo: MongoCaseRepository | null = null;
+  if (mongoDbInstance) {
+    mongoKnowledgeRepo = new MongoKnowledgeRepository(mongoDbInstance);
+    mongoCaseRepo = new MongoCaseRepository(mongoDbInstance);
+  }
+
+  // 4. Initialize Model Provider (Local Ollama / Google Gemini / Groq / OpenAI)
+  const modelProvider = createModelProvider(config);
 
   const modelHealth = await modelProvider.healthCheck();
   if (modelHealth.ok) {
     logger.info({
-      model: config.OLLAMA_MODEL,
-      embeddingModel: config.OLLAMA_EMBEDDING_MODEL,
+      provider: config.MODEL_PROVIDER,
       modelReady: modelHealth.selectedModelAvailable,
       embeddingsReady: modelHealth.embeddingModelAvailable,
-    }, 'Ollama model provider online and ready');
+    }, 'Model provider online and ready');
   } else {
-    logger.warn({ error: modelHealth.error }, 'Ollama health check reported issues (AI features will use fallbacks)');
+    logger.warn({ provider: config.MODEL_PROVIDER, error: modelHealth.error }, 'Model health check reported issues (AI features will use fallbacks)');
   }
 
-  // 4. Initialize Web & GitHub Clients
+  // 5. Initialize Web, GitHub, & SerpApi Clients
   const allowedDomainsList = config.ALLOWED_DOMAINS.split(',').map(d => d.trim()).filter(Boolean);
   const safeFetcher = new SafeFetcher(allowedDomainsList);
   const githubClient = new GitHubClient(config.GITHUB_TOKEN);
+  const serpApiClient = new SerpApiClient(config.SERPAPI_API_KEY);
 
-  // 5. Initialize Memory & Agent Engines
+  if (serpApiClient.isConfigured()) {
+    logger.info('SerpApi Google search enabled for live web investigations');
+  }
+
+  // 6. Initialize Memory & Agent Engines
   const memoryRetriever = new MemoryRetriever(knowledgeRepo, caseRepo, modelProvider);
   const learningPipeline = new LearningPipeline(knowledgeRepo, auditRepo, modelProvider);
-  const toolRegistry = new ToolRegistry(memoryRetriever, safeFetcher, githubClient, caseRepo, evidenceRepo);
+  const toolRegistry = new ToolRegistry(memoryRetriever, safeFetcher, githubClient, caseRepo, evidenceRepo, serpApiClient);
 
   const orchestrator = new AgentOrchestrator(
     db,
@@ -97,7 +130,7 @@ export async function bootstrap() {
 
   const incidentDetector = new IncidentDetector(caseRepo, incidentRepo, auditRepo);
 
-  // 6. Initialize Bot Interaction Router
+  // 7. Initialize Bot Interaction Router
   const router = new BotInteractionRouter(
     guildRepo,
     caseRepo,
@@ -109,7 +142,7 @@ export async function bootstrap() {
     incidentDetector
   );
 
-  // 7. Start Discord Client if token is configured
+  // 8. Start Discord Client if token is configured
   let discordClient = null;
   if (config.DISCORD_BOT_TOKEN && config.DISCORD_BOT_TOKEN !== 'dummy_token_for_tests') {
     discordClient = createBotClient({
@@ -129,12 +162,13 @@ export async function bootstrap() {
   }
 
   // Graceful shutdown
-  const shutdown = () => {
+  const shutdown = async () => {
     logger.info('Shutting down ThreadSherpa gracefully...');
     if (discordClient) {
       discordClient.destroy();
     }
     closeDatabase();
+    await closeMongo();
     process.exit(0);
   };
 
@@ -143,6 +177,9 @@ export async function bootstrap() {
 
   return {
     db,
+    mongoDbInstance,
+    mongoKnowledgeRepo,
+    mongoCaseRepo,
     guildRepo,
     caseRepo,
     knowledgeRepo,
@@ -155,6 +192,7 @@ export async function bootstrap() {
     incidentDetector,
     router,
     discordClient,
+    serpApiClient,
   };
 }
 

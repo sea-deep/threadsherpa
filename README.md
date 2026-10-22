@@ -2,9 +2,9 @@
 
 > *"Investigate once. Remember the resolution. Stop solving the same problem twice."*
 
-ThreadSherpa is an open-source, self-hostable, autonomous Discord support copilot with **persistent, human-trained memory**. Engineered for technical communities, developer Discord servers, hackathons, open-source projects, and engineering support teams.
+ThreadSherpa is an open-source, self-hostable Discord support copilot with **persistent, human-trained memory**. Built for technical communities, developer Discord servers, hackathons, open-source projects, and engineering support teams.
 
-Unlike generic FAQ bots or chat wrappers that blindly store every message as memory or hallucinate unverified answers, ThreadSherpa operates like an experienced tier-2 support engineer: it investigates technical issues using permitted tools, validates evidence against official documentation and GitHub repositories, asks targeted questions when details are missing, escalates sensitive cases, and continuously learns from human support administrator corrections through an auditable approval workflow.
+Unlike generic FAQ bots or chat wrappers that blindly treat every message as memory or hallucinate unverified answers, ThreadSherpa operates like an experienced tier-2 support engineer: it investigates technical issues using permitted tools, validates evidence against official documentation and GitHub repositories, asks targeted questions when details are missing, escalates sensitive cases, and continuously learns from human support administrator corrections through an auditable approval workflow.
 
 ---
 
@@ -15,10 +15,11 @@ Unlike generic FAQ bots or chat wrappers that blindly store every message as mem
 | Blindly treats every chat message as memory | Human-in-the-loop review cards for approved, versioned knowledge |
 | Hallucinates solutions when information is missing | Enforces deterministic response policy and asks targeted follow-ups |
 | Single-turn prompt-response loop | Bounded autonomous investigation loop (Plan -> Act -> Evaluate -> Stop) |
-| Relies exclusively on expensive proprietary APIs | Powered by local open-weight models (`gemma4` & `embeddinggemma-2` via Ollama) |
-| Ephemeral in-memory context lost on restart | Durable SQLite/PostgreSQL storage with FTS5 lexical & vector similarity search |
+| Relies exclusively on expensive proprietary APIs | Hybrid: Local open-weights (`gemma4` via Ollama) OR cloud APIs (Gemini, Groq, OpenAI) |
+| Ephemeral in-memory context lost on restart | Durable persistence: SQLite (`node:sqlite` + FTS5) or MongoDB Atlas (Vector Search) |
 | Ignores developer tools and repositories | Searches connected GitHub repos, checks duplicates, and drafts issues |
 | Treats repeated complaints as isolated tickets | Detects shared incident clusters and alerts administrators to outages |
+| Unmonitored execution | Sentry Agent Tracing instrumenting tool calls, inference, and spans |
 
 ---
 
@@ -39,14 +40,16 @@ The fundamental differentiator of ThreadSherpa is its closed feedback loop:
          │
   [6. APPROVE] ──────> Admin reviews Discord Review Card: [Approve] [Reject]
          │
-  [7. REMEMBER] ─────> Versioned record committed to SQLite + FTS5 + Vector index
+  [7. REMEMBER] ─────> Versioned record committed to SQLite/Atlas + Vector index
          │
   [8. RECALL] ───────> Next member asks paraphrased question: immediate recall!
 ```
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ Architecture & Integrations
+
+ThreadSherpa is designed as a modular monolith with strict separation between deterministic control flow and open-weight model reasoning.
 
 ```
                              +-------------------------+
@@ -76,23 +79,37 @@ The fundamental differentiator of ThreadSherpa is its closed feedback loop:
 |  |   - Response Policy & Confidence Calibration                                 |  |
 |  |   - Incident Detection Engine (Clustering symptoms & error codes)            |  |
 |  |   - GitHub Issue Drafter & Copilot                                           |  |
+|  |   - Sentry Agent Tracing (`traceAgentAction` spans for tools & inference)     |  |
 |  +----+----------------------+---------------------+----------------------+-----+  |
 |       |                      |                     |                      |        |
 |       v                      v                     v                      v        |
 |  +---------+           +------------+        +------------+         +-----------+  |
-|  | Memory  |           | Model      |        | Tool & Web |         | Security  |  |
-|  | Manager |           | Provider   |        | Access     |         | & Audit   |  |
+|  | Storage |           | Model      |        | Tool & Web |         | Security  |  |
+|  | Layer   |           | Provider   |        | Access     |         | & Sentry  |  |
 |  +----+----+           +-----+------+        +-----+------+         +-----+-----+  |
 |       |                      |                     |                      |        |
 +-------|----------------------|---------------------|----------------------|--------+
         |                      |                     |                      |
         v                      v                     v                      v
 +---------------+      +---------------+     +---------------+      +---------------+
-| SQLite / FTS5 |      | Ollama Local  |     | Web Fetcher   |      | Audit Log     |
-| Embeddings DB |      | Gemma 4 /     |     | (SSRF Guard)  |      | Role-Based    |
-| Schema Migr.  |      | EmbeddingGem. |     | GitHub API    |      | Auth Controls |
+| Dual DB:      |      | Ollama Local  |     | Web Fetcher   |      | Sentry Spans  |
+| - SQLite/FTS5 |      | Gemma 4 /     |     | (SSRF Guard)  |      | Audit Trail   |
+| - Mongo Atlas |      | EmbeddingGem. |     | SerpApi Web   |      | Role Controls |
+|   Vector Srch |      | 768-dim Vecs  |     | GitHub API    |      | Auth Defense  |
 +---------------+      +---------------+     +---------------+      +---------------+
 ```
+
+---
+
+## 🏆 Supported Platforms & Challenge Integrations
+
+- **MongoDB Atlas**: Native database backend support (`DATABASE_PROVIDER=mongodb`). Uses Atlas Vector Search (`$vectorSearch`), Atlas Full-Text indexes, and versioned collections (`knowledge_items`, `knowledge_versions`, `knowledge_reviews`, `support_cases`).
+- **Flexible AI Inference (Local & Cloud)**:
+  - **Local Open-Weight**: `gemma4:e4b-it-qat` (7.5B, context 131k) and `embeddinggemma-2:270m` (768 dimensions) via local Ollama.
+  - **Cloud Ready**: Standard OpenAI-compatible client connecting to Google Gemini (`gemini-2.0-flash`), Groq (`llama-3.3-70b-versatile`), OpenRouter, or OpenAI (`gpt-4o-mini`).
+- **Sentry Agent Tracing**: Distributed tracing using `@sentry/node` to measure latency, tool execution, model prompt repairs, and investigation spans.
+- **SerpApi**: Real-time Google Web Search tool for unblocking investigations on third-party libraries, GitHub issues, and compiler errors.
+- **Render**: Production cloud deployment ready via `render.yaml` blueprint.
 
 ---
 
@@ -128,22 +145,38 @@ Copy the example environment configuration:
 cp .env.example .env
 ```
 
-Edit `.env` with your Discord credentials:
+Edit `.env` with your configuration:
 ```env
 DISCORD_BOT_TOKEN=your_bot_token_here
 DISCORD_CLIENT_ID=your_client_id_here
 DISCORD_DEV_GUILD_ID=your_test_guild_id_here
 
-# Local Ollama
+# AI Model Provider: 'ollama' (default) | 'gemini' | 'groq' | 'openai' | 'openrouter'
+MODEL_PROVIDER=ollama
+
+# Option A: Local Ollama (Zero cost, runs locally)
 OLLAMA_BASE_URL=http://localhost:11434
 OLLAMA_MODEL=gemma4:e4b-it-qat
 OLLAMA_EMBEDDING_MODEL=embeddinggemma-2:270m
 
-# Database
+# Option B: Cloud AI Inference (Render / Serverless)
+# MODEL_PROVIDER=gemini
+# GEMINI_API_KEY=your_gemini_api_key
+# OPENAI_MODEL=gemini-2.0-flash
+# (Or Groq: GROQ_API_KEY=your_groq_key, or OpenAI: OPENAI_API_KEY=your_key)
+
+# Database Provider: 'sqlite' (default) or 'mongodb'
+DATABASE_PROVIDER=sqlite
 DATABASE_PATH=./data/threadsherpa.sqlite
 
-# Optional GitHub Integration
-GITHUB_TOKEN=your_pat_token_optional
+# If using MongoDB Atlas:
+# DATABASE_PROVIDER=mongodb
+# MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.mongodb.net/threadsherpa?retryWrites=true&w=majority
+
+# Optional Partner Tooling:
+# SENTRY_DSN=https://examplePublicKey@o0.ingest.sentry.io/0
+# SERPAPI_API_KEY=your_serpapi_key
+# GITHUB_TOKEN=your_github_pat
 ```
 
 ### 5. Seed Synthetic Demo Data (Optional)
@@ -165,13 +198,14 @@ npm start
 
 ---
 
-## 🐳 Docker Deployment
+## ☁️ Deployment on Render
 
-ThreadSherpa is fully containerized and can be launched alongside local Ollama:
+ThreadSherpa includes a native `render.yaml` specification for deploying as a persistent background worker:
 
-```bash
-docker compose up -d --build
-```
+1. Connect your repository to [Render](https://render.com).
+2. Create a Blueprint deployment using `render.yaml`.
+3. Set your `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, and `MONGODB_URI` environment variables in the Render Dashboard.
+4. Render deploys the Node.js service with zero-downtime health monitoring.
 
 ---
 
@@ -194,11 +228,14 @@ docker compose up -d --build
 
 ## 🧪 Testing & Verification
 
-ThreadSherpa includes a comprehensive test suite covering unit tests, SSRF guards, response policies, and the indispensable end-to-end "Learn -> Restart -> Recall" test:
+ThreadSherpa includes a comprehensive test suite covering unit tests, SSRF guards, response policies, MongoDB Atlas repositories, partner modules, and the indispensable end-to-end "Learn -> Restart -> Recall" test:
 
 ```bash
-# Run complete test suite
+# Run complete test suite (48 tests across 12 files)
 npm test
+
+# Run unit tests only
+npx vitest run tests/unit/
 
 # Run type-checking
 npm run typecheck

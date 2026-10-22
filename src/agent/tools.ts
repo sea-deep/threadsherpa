@@ -1,8 +1,10 @@
 import { MemoryRetriever } from '../memory/retriever.js';
 import { SafeFetcher } from '../integrations/web/safe-fetcher.js';
 import { GitHubClient } from '../integrations/github/github.client.js';
+import { SerpApiClient } from '../integrations/web/serpapi.client.js';
 import { CaseRepository } from '../database/repositories/case.repo.js';
 import { EvidenceRepository } from '../database/repositories/evidence.repo.js';
+import { traceAgentAction } from '../utils/sentry.js';
 import { logger } from '../utils/logger.js';
 
 export interface ToolContext {
@@ -20,19 +22,48 @@ export interface ToolResult {
 }
 
 export class ToolRegistry {
+  private serpApiClient: SerpApiClient;
+
   constructor(
     private memoryRetriever: MemoryRetriever,
     private safeFetcher: SafeFetcher,
     private githubClient: GitHubClient,
     private caseRepo: CaseRepository,
-    private evidenceRepo: EvidenceRepository
-  ) {}
+    private evidenceRepo: EvidenceRepository,
+    serpApiClient?: SerpApiClient
+  ) {
+    this.serpApiClient = serpApiClient || new SerpApiClient();
+  }
 
   async executeTool(toolName: string, args: Record<string, unknown>, ctx: ToolContext): Promise<ToolResult> {
-    logger.debug({ toolName, args, caseId: ctx.caseId }, 'Executing agent tool');
+    return await traceAgentAction(`tool.${toolName}`, 'agent.tool', { toolName, caseId: ctx.caseId }, async () => {
+      logger.debug({ toolName, args, caseId: ctx.caseId }, 'Executing agent tool');
 
-    try {
-      switch (toolName) {
+      try {
+        switch (toolName) {
+          case 'search_web_serpapi': {
+            const query = String(args.query || '');
+            const results = await this.serpApiClient.search(query, 3);
+
+            for (const item of results) {
+              this.evidenceRepo.add({
+                evidence_id: `ev_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                case_id: ctx.caseId,
+                source_type: 'web',
+                source_url: item.link,
+                title: item.title,
+                excerpt: item.snippet,
+                authority_score: 0.75,
+                metadata: { source: item.source },
+              });
+            }
+
+            return {
+              tool: toolName,
+              success: true,
+              data: { searchResults: results },
+            };
+          }
         case 'search_knowledge': {
           const query = String(args.query || '');
           const results = await this.memoryRetriever.search(ctx.guildId, query, 3);
@@ -191,5 +222,6 @@ export class ToolRegistry {
         error: msg,
       };
     }
-  }
+  });
+}
 }

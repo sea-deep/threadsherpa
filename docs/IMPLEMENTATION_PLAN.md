@@ -72,6 +72,9 @@
   - `tests/unit/policy.test.ts`: Response policy, sensitive account escalation, ungrounded hallucination prevention, citation validation.
   - `tests/unit/incident-detector.test.ts`: Symptom clustering, existing incident linkage, admin confirmation.
   - `tests/unit/github-copilot.test.ts`: Duplicate issue search, structured Markdown draft generation, allowlist gating.
+  - `tests/unit/sentry.test.ts`: Distributed tracing spans (`traceAgentAction`), error propagation, and context enrichment.
+  - `tests/unit/partner-integrations.test.ts`: Real-time Google web search via SerpApi for finding upstream GitHub issues and technical documentation.
+  - `tests/unit/mongo-repositories.test.ts`: MongoDB Atlas repository mappings, document versioning, approval workflows, and vector search fallback ranking.
 - **Integration Tests**:
   - `tests/integration/bot-router.test.ts`: Slash command routing (`/setup`, `/ask`, `/teach`), button actions (`approve_know`, `reject_know`), message monitoring in support channels.
 - **Indispensable E2E Release Gate**:

@@ -12,25 +12,43 @@ const envSchema = z.object({
   DISCORD_CLIENT_ID: z.string().default('123456789012345678'),
   DISCORD_DEV_GUILD_ID: z.string().optional(),
 
-  // Database Configuration
+  // Database Configuration (Dual Provider: SQLite / MongoDB Atlas)
+  DATABASE_PROVIDER: z.enum(['sqlite', 'mongodb']).default('sqlite'),
   DATABASE_PATH: z.string().default('./data/threadsherpa.sqlite'),
+  MONGODB_URI: z.string().optional(),
+  MONGODB_DB_NAME: z.string().default('threadsherpa'),
 
-  // Ollama Model Configuration
+  // Model Provider Selection & Cloud APIs
+  MODEL_PROVIDER: z.enum(['ollama', 'openai', 'gemini', 'groq', 'openrouter']).default('ollama'),
+
+  // Local Open-Weight Model Configuration (Ollama / Gemma)
   OLLAMA_BASE_URL: z.string().url().default('http://localhost:11434'),
   OLLAMA_MODEL: z.string().default('gemma4:e4b-it-qat'),
   OLLAMA_EMBEDDING_MODEL: z.string().default('embeddinggemma-2:270m'),
   OLLAMA_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
 
+  // External / Cloud Model Provider Configuration
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_BASE_URL: z.string().optional(),
+  OPENAI_MODEL: z.string().optional(),
+  OPENAI_EMBEDDING_MODEL: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  GROQ_API_KEY: z.string().optional(),
+
   // GitHub Integration Configuration
   GITHUB_TOKEN: z.string().optional(),
   GITHUB_DEFAULT_REPO: z.string().optional(),
+
+  // Partner Integrations (Hacktoberfest Challenge Categories)
+  SENTRY_DSN: z.string().optional(),
+  SERPAPI_API_KEY: z.string().optional(),
 
   // Support Bot Settings
   DEFAULT_AUTONOMY_MODE: z.enum(['observe', 'supervised', 'auto']).default('supervised'),
   MAX_INVESTIGATION_ROUNDS: z.coerce.number().int().min(1).max(5).default(3),
   MAX_TOOL_CALLS_PER_INVESTIGATION: z.coerce.number().int().min(1).max(12).default(6),
   INVESTIGATION_TIMEOUT_MS: z.coerce.number().int().positive().default(45000),
-  ALLOWED_DOMAINS: z.string().default(''), // Comma-separated allowlisted domains for web fetching
+  ALLOWED_DOMAINS: z.string().default('docs.github.com,nodejs.org,mongodb.com'),
 });
 
 export type AppConfig = z.infer<typeof envSchema>;
@@ -42,6 +60,11 @@ export function loadConfig(overrides?: Partial<Record<string, unknown>>): AppCon
     ...process.env,
     ...(overrides || {}),
   };
+
+  // Auto-detect MongoDB if MONGODB_URI is provided and DATABASE_PROVIDER was not explicitly set
+  if (rawEnv.MONGODB_URI && !rawEnv.DATABASE_PROVIDER) {
+    rawEnv.DATABASE_PROVIDER = 'mongodb';
+  }
 
   const result = envSchema.safeParse(rawEnv);
   if (!result.success) {

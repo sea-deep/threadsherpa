@@ -113,6 +113,7 @@ Available Tools:
 - search_knowledge(query)
 - find_similar_cases(query)
 - fetch_url(url)
+- search_web_serpapi(query)
 - search_github_issues(repo, query)
 - get_github_issue(repo, issueNumber)
 - search_github_releases(repo)
