@@ -200,12 +200,23 @@ npm start
 
 ## ☁️ Deployment on Render
 
-ThreadSherpa includes a native `render.yaml` specification for deploying as a persistent background worker:
+ThreadSherpa can be deployed to Render as a persistent background worker using either the Blueprint specification or the Render Dashboard:
 
-1. Connect your repository to [Render](https://render.com).
-2. Create a Blueprint deployment using `render.yaml`.
-3. Set your `DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, and `MONGODB_URI` environment variables in the Render Dashboard.
-4. Render deploys the Node.js service with zero-downtime health monitoring.
+### Option A: Blueprint Infrastructure-as-Code (`render.yaml`)
+1. In the [Render Dashboard](https://dashboard.render.com), select **Blueprints** $\rightarrow$ **New Blueprint Instance**.
+2. Connect your `threadsherpa` repository.
+3. Render automatically reads [`render.yaml`](render.yaml) (configured with `runtime: node` and `autoDeployTrigger: commit`).
+4. Enter your secrets (`DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `MONGODB_URI`, and your AI API key like `GEMINI_API_KEY`).
+5. Click **Apply** to provision the worker.
+
+### Option B: Manual Background Worker
+1. In the Render Dashboard, click **New +** $\rightarrow$ **Background Worker**.
+2. Connect your Git repository.
+3. Configure the service settings:
+   - **Runtime**: Node
+   - **Build Command**: `npm ci && npm run build`
+   - **Start Command**: `npm start`
+4. Add the environment variables from your `.env` file (`DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `DATABASE_PROVIDER=mongodb`, `MONGODB_URI`, `MODEL_PROVIDER=gemini`, `GEMINI_API_KEY`).
 
 ---
 

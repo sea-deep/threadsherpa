@@ -4,11 +4,11 @@
 services:
   - type: worker
     name: threadsherpa-copilot
-    env: node
+    runtime: node
     plan: starter
     buildCommand: npm ci && npm run build
     startCommand: npm start
-    autoDeploy: true
+    autoDeployTrigger: commit
     envVars:
       - key: NODE_ENV
         value: production
