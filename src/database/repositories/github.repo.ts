@@ -1,10 +1,14 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { Db } from 'mongodb';
 import { GitHubLink, GitHubLinkStatus } from '../../domain/github.js';
 
 export class GitHubRepository {
-  constructor(private db: DatabaseSync) {}
+  constructor(private db: Db) {}
 
-  createDraft(draft: {
+  private get collection() {
+    return this.db.collection('github_links');
+  }
+
+  async createDraft(draft: {
     link_id: string;
     case_id: string;
     repo_owner: string;
@@ -12,7 +16,7 @@ export class GitHubRepository {
     draft_title: string;
     draft_body: string;
     created_by: string;
-  }): GitHubLink {
+  }): Promise<GitHubLink> {
     const now = new Date().toISOString();
     const link: GitHubLink = {
       ...draft,
@@ -20,78 +24,68 @@ export class GitHubRepository {
       created_at: now,
     };
 
-    this.db.prepare(`
-      INSERT INTO github_links (
-        link_id, case_id, repo_owner, repo_name,
-        draft_title, draft_body, status, created_by, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      link.link_id,
-      link.case_id,
-      link.repo_owner,
-      link.repo_name,
-      link.draft_title,
-      link.draft_body,
-      link.status,
-      link.created_by,
-      link.created_at
-    );
-
+    await this.collection.insertOne({ ...link });
     return link;
   }
 
-  get(linkId: string): GitHubLink | null {
-    const row = this.db.prepare('SELECT * FROM github_links WHERE link_id = ?').get(linkId) as Record<string, unknown> | undefined;
-    if (!row) return null;
-    return this.mapRow(row);
+  async get(linkId: string): Promise<GitHubLink | null> {
+    const doc = await this.collection.findOne({ link_id: linkId });
+    if (!doc) return null;
+    return this.mapDoc(doc as Record<string, unknown>);
   }
 
-  getByCaseId(caseId: string): GitHubLink[] {
-    const rows = this.db.prepare('SELECT * FROM github_links WHERE case_id = ? ORDER BY created_at DESC').all(caseId) as Array<Record<string, unknown>>;
-    return rows.map(r => this.mapRow(r));
+  async getByCaseId(caseId: string): Promise<GitHubLink[]> {
+    const docs = await this.collection
+      .find({ case_id: caseId })
+      .sort({ created_at: -1 })
+      .toArray();
+
+    return docs.map(d => this.mapDoc(d as Record<string, unknown>));
   }
 
-  markCreated(linkId: string, issueNumber: number, issueUrl: string, approvedBy: string): GitHubLink | null {
+  async markCreated(linkId: string, issueNumber: number, issueUrl: string, approvedBy: string): Promise<GitHubLink | null> {
     const now = new Date().toISOString();
-    this.db.prepare(`
-      UPDATE github_links SET
-        status = 'created',
-        issue_number = ?,
-        issue_url = ?,
-        approved_by = ?,
-        synced_at = ?
-      WHERE link_id = ?
-    `).run(issueNumber, issueUrl, approvedBy, now, linkId);
+    await this.collection.updateOne(
+      { link_id: linkId },
+      {
+        $set: {
+          status: 'created',
+          issue_number: issueNumber,
+          issue_url: issueUrl,
+          approved_by: approvedBy,
+          synced_at: now,
+        },
+      }
+    );
 
-    return this.get(linkId);
+    return await this.get(linkId);
   }
 
-  updateStatus(linkId: string, status: GitHubLinkStatus, approvedBy?: string): GitHubLink | null {
-    this.db.prepare(`
-      UPDATE github_links SET
-        status = ?,
-        approved_by = COALESCE(?, approved_by)
-      WHERE link_id = ?
-    `).run(status, approvedBy || null, linkId);
+  async updateStatus(linkId: string, status: GitHubLinkStatus, approvedBy?: string): Promise<GitHubLink | null> {
+    const update: Record<string, unknown> = { status };
+    if (approvedBy) {
+      update.approved_by = approvedBy;
+    }
 
-    return this.get(linkId);
+    await this.collection.updateOne({ link_id: linkId }, { $set: update });
+    return await this.get(linkId);
   }
 
-  private mapRow(row: Record<string, unknown>): GitHubLink {
+  private mapDoc(doc: Record<string, unknown>): GitHubLink {
     return {
-      link_id: String(row.link_id),
-      case_id: String(row.case_id),
-      repo_owner: String(row.repo_owner),
-      repo_name: String(row.repo_name),
-      issue_number: row.issue_number ? Number(row.issue_number) : null,
-      issue_url: row.issue_url ? String(row.issue_url) : null,
-      draft_title: String(row.draft_title),
-      draft_body: String(row.draft_body),
-      status: row.status as GitHubLinkStatus,
-      created_by: String(row.created_by),
-      approved_by: row.approved_by ? String(row.approved_by) : null,
-      created_at: String(row.created_at),
-      synced_at: row.synced_at ? String(row.synced_at) : null,
+      link_id: String(doc.link_id),
+      case_id: String(doc.case_id),
+      repo_owner: String(doc.repo_owner),
+      repo_name: String(doc.repo_name),
+      issue_number: doc.issue_number ? Number(doc.issue_number) : null,
+      issue_url: doc.issue_url ? String(doc.issue_url) : null,
+      draft_title: String(doc.draft_title),
+      draft_body: String(doc.draft_body),
+      status: doc.status as GitHubLinkStatus,
+      created_by: String(doc.created_by),
+      approved_by: doc.approved_by ? String(doc.approved_by) : null,
+      created_at: String(doc.created_at),
+      synced_at: doc.synced_at ? String(doc.synced_at) : null,
     };
   }
 }

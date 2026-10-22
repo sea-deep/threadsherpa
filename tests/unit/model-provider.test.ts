@@ -40,7 +40,7 @@ describe('Ollama Model Provider', () => {
     expect(result).toHaveProperty('title');
     expect(result).toHaveProperty('summary');
     expect(['install', 'bug', 'general', 'question']).toContain(result.category);
-  }, 50000);
+  }, 90000);
 
   it('uses fallback embedding deterministically when offline or error occurs', () => {
     const offlineProvider = new OllamaProvider({

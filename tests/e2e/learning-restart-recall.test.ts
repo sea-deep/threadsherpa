@@ -1,8 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import fs from 'node:fs';
-import path from 'node:path';
-import { createDatabase } from '../../src/database/connection.js';
-import { runMigrations } from '../../src/database/migrator.js';
+import { connectDatabase, closeDatabase } from '../../src/database/connection.js';
+import { clearMemoryDatabases } from '../../src/database/memory-db.js';
 import { GuildConfigRepository } from '../../src/database/repositories/guild-config.repo.js';
 import { CaseRepository } from '../../src/database/repositories/case.repo.js';
 import { EvidenceRepository } from '../../src/database/repositories/evidence.repo.js';
@@ -18,8 +16,8 @@ import { LearningPipeline } from '../../src/memory/learner.js';
 import { ToolRegistry } from '../../src/agent/tools.js';
 import { AgentOrchestrator } from '../../src/agent/orchestrator.js';
 
-describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart -> Recall', () => {
-  const testDbPath = './data/test_e2e_threadsherpa.sqlite';
+describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart -> Recall (MongoDB)', () => {
+  const e2eUri = 'memory://test_e2e_threadsherpa_mongo';
   const guildId = 'guild_enterprise_support';
   const supportChannelId = 'chan_tech_support';
   const adminId = 'admin_sarah';
@@ -31,23 +29,20 @@ describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart
   });
 
   beforeAll(() => {
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
-    }
+    clearMemoryDatabases();
   });
 
-  afterAll(() => {
-    if (fs.existsSync(testDbPath)) {
-      fs.unlinkSync(testDbPath);
-    }
+  afterAll(async () => {
+    await closeDatabase();
+    clearMemoryDatabases();
   });
 
   it('proves the complete human-trained memory loop survives a full system restart', async () => {
     // =========================================================================
     // STEP 1: INITIAL APPLICATION INSTANTIATION (SESSION 1)
     // =========================================================================
-    let db = createDatabase({ path: testDbPath });
-    runMigrations(db);
+    let conn = await connectDatabase({ uri: e2eUri });
+    let db = conn.db;
 
     let guildRepo = new GuildConfigRepository(db);
     let caseRepo = new CaseRepository(db);
@@ -57,7 +52,7 @@ describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart
     let auditRepo = new AuditRepository(db);
     let githubRepo = new GitHubRepository(db);
 
-    guildRepo.upsert({
+    await guildRepo.upsert({
       guild_id: guildId,
       autonomy_mode: 'supervised',
       support_channel_ids: [supportChannelId],
@@ -73,7 +68,6 @@ describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart
     let toolRegistry = new ToolRegistry(memoryRetriever, safeFetcher, githubClient, caseRepo, evidenceRepo);
 
     let orchestrator = new AgentOrchestrator(
-      db,
       caseRepo,
       evidenceRepo,
       guildRepo,
@@ -87,7 +81,7 @@ describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart
     // STEP 2: USER 1 ASKS INITIAL QUESTION A (NO KNOWLEDGE EXISTS YET)
     // =========================================================================
     const caseAId = 'case_001_node26_sqlite';
-    caseRepo.create({
+    await caseRepo.create({
       case_id: caseAId,
       guild_id: guildId,
       channel_id: supportChannelId,
@@ -126,7 +120,7 @@ describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart
     // =========================================================================
     // STEP 4: ADMIN APPROVES KNOWLEDGE CANDIDATE -> INDEXED AND COMMITTED
     // =========================================================================
-    const approvedKnowledge = learningPipeline.approveCandidate(
+    const approvedKnowledge = await learningPipeline.approveCandidate(
       candidateResult.candidate.knowledge_id,
       adminId,
       'Verified personally on macOS arm64 Node 26'
@@ -136,16 +130,18 @@ describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart
     expect(approvedKnowledge?.approval_status).toBe('approved');
 
     // Mark case A as resolved
-    caseRepo.updateStatus(caseAId, 'resolved', 'Resolved by admin knowledge');
+    await caseRepo.updateStatus(caseAId, 'resolved', 'Resolved by admin knowledge');
 
     // =========================================================================
     // STEP 5: FULL APPLICATION REBOOT / RESTART
     // =========================================================================
     // Close the database and destroy all memory references to simulate a cold bot restart
-    db.close();
+    await closeDatabase();
 
-    // Cold boot from persistent disk
-    db = createDatabase({ path: testDbPath });
+    // Cold boot from persistent database
+    conn = await connectDatabase({ uri: e2eUri });
+    db = conn.db;
+
     guildRepo = new GuildConfigRepository(db);
     caseRepo = new CaseRepository(db);
     evidenceRepo = new EvidenceRepository(db);
@@ -158,7 +154,6 @@ describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart
     toolRegistry = new ToolRegistry(memoryRetriever, safeFetcher, githubClient, caseRepo, evidenceRepo);
 
     orchestrator = new AgentOrchestrator(
-      db,
       caseRepo,
       evidenceRepo,
       guildRepo,
@@ -168,8 +163,8 @@ describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart
       6
     );
 
-    // Verify knowledge survived restart on disk
-    const reloadedApproved = knowledgeRepo.get(candidateResult.candidate.knowledge_id);
+    // Verify knowledge survived restart
+    const reloadedApproved = await knowledgeRepo.get(candidateResult.candidate.knowledge_id);
     expect(reloadedApproved).toBeDefined();
     expect(reloadedApproved?.approval_status).toBe('approved');
     expect(reloadedApproved?.canonical_answer.toLowerCase()).toContain('node:sqlite');
@@ -178,7 +173,7 @@ describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart
     // STEP 6: USER 2 ASKS PARAPHRASED QUESTION B AFTER RESTART
     // =========================================================================
     const caseBId = 'case_002_paraphrased';
-    caseRepo.create({
+    await caseRepo.create({
       case_id: caseBId,
       guild_id: guildId,
       channel_id: supportChannelId,
@@ -202,7 +197,7 @@ describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart
     expect(resultB.policyResult.finalAnswer.toLowerCase()).toContain('node:sqlite');
 
     // Check case evidence in Case B contains the approved memory citation
-    const caseBEvidence = evidenceRepo.getByCaseId(caseBId);
+    const caseBEvidence = await evidenceRepo.getByCaseId(caseBId);
     expect(caseBEvidence.length).toBeGreaterThan(0);
     const memoryEvidence = caseBEvidence.find(e => e.source_type === 'memory');
     expect(memoryEvidence).toBeDefined();
@@ -212,18 +207,18 @@ describe('INDISPENSABLE E2E RELEASE GATE: Learn -> Approve -> Persist -> Restart
     // STEP 8: VERIFY SUPERSEDED / REJECTED STATUS DOES NOT POLLUTE FUTURE SEARCH
     // =========================================================================
     // Create a bad candidate and reject it
-    const badCandidate = knowledgeRepo.createCandidate({
+    const badCandidate = await knowledgeRepo.createCandidate({
       knowledge_id: 'know_wrong_workaround',
       guild_id: guildId,
       question_patterns: ['disable compiler warnings'],
       canonical_answer: 'Run --force --ignore-scripts on everything',
       created_by: 'intern',
     });
-    learningPipeline.rejectCandidate(badCandidate.knowledge_id, adminId, 'Dangerous advice');
+    await learningPipeline.rejectCandidate(badCandidate.knowledge_id, adminId, 'Dangerous advice');
 
-    const searchAfterReject = knowledgeRepo.searchLexical(guildId, 'disable compiler warnings');
+    const searchAfterReject = await knowledgeRepo.searchLexical(guildId, 'disable compiler warnings');
     expect(searchAfterReject.some(k => k.knowledge_id === 'know_wrong_workaround')).toBe(false);
 
-    db.close();
+    await closeDatabase();
   }, 180000);
 });

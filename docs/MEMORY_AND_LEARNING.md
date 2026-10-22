@@ -61,7 +61,7 @@ The entire differentiator of ThreadSherpa is its closed learning cycle:
                         (Admin Approves)
                                 │
                                 v
-               [Persistent Indexing (SQLite + FTS5)]
+               [Persistent Indexing (MongoDB Atlas)]
                                 │
                                 v
        [Future Inquiries Automatically Recalled & Cited]
@@ -81,7 +81,7 @@ Before presenting the candidate, the system checks existing approved knowledge i
 
 ### Step 4: Admin Review & Governance
 An interactive Discord embed is dispatched to authorized administrators with buttons:
-- **`[Approve & Index]`**: Commits the candidate to `knowledge_items`, assigns version 1, indexes it in SQLite FTS5 and vector tables, and logs an audit event.
+- **`[Approve & Index]`**: Commits the candidate to `knowledge_items`, assigns version 1, indexes it in MongoDB text and vector indexes, and logs an audit event.
 - **`[Reject]`**: Marks the candidate as `rejected`. It will never be indexed or retrieved as positive guidance.
 
 ### Step 5: Versioning and Correction (Supersession)
@@ -99,7 +99,7 @@ When an existing procedure changes or an earlier answer was incomplete:
 When a user asks a question, ThreadSherpa executes hybrid retrieval:
 
 1. **Exact & Error Matching**: Scans for exact error strings and technical identifiers (e.g., `GetPrototype`, `HTTP 503`, `node:sqlite`).
-2. **Lexical Full-Text Search**: Queries SQLite FTS5 virtual table (`fts_knowledge`) for keyword matches.
+2. **Lexical Full-Text Search**: Queries MongoDB text search index for keyword and pattern matches.
 3. **Semantic Vector Search**: Calculates cosine distance between the user query embedding (via `embeddinggemma-2:270m`) and all approved knowledge embeddings.
 4. **Hybrid Scoring Fusion**: Combines lexical relevance and vector cosine similarity:
    $$\text{Score} = (\text{LexicalScore} \times 0.5) + (\text{VectorSimilarity} \times 0.7)$$

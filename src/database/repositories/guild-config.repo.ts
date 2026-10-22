@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { Db } from 'mongodb';
 
 export interface GuildConfig {
   guild_id: string;
@@ -14,17 +14,20 @@ export interface GuildConfig {
 }
 
 export class GuildConfigRepository {
-  constructor(private db: DatabaseSync) {}
+  constructor(private db: Db) {}
 
-  get(guildId: string): GuildConfig | null {
-    const row = this.db.prepare('SELECT * FROM guild_configs WHERE guild_id = ?').get(guildId) as Record<string, unknown> | undefined;
-    if (!row) return null;
-
-    return this.mapRow(row);
+  private get collection() {
+    return this.db.collection('guild_configs');
   }
 
-  upsert(config: Partial<GuildConfig> & { guild_id: string }): GuildConfig {
-    const existing = this.get(config.guild_id);
+  async get(guildId: string): Promise<GuildConfig | null> {
+    const doc = await this.collection.findOne({ guild_id: guildId });
+    if (!doc) return null;
+    return this.mapDoc(doc as Record<string, unknown>);
+  }
+
+  async upsert(config: Partial<GuildConfig> & { guild_id: string }): Promise<GuildConfig> {
+    const existing = await this.get(config.guild_id);
     const now = new Date().toISOString();
 
     if (existing) {
@@ -34,27 +37,9 @@ export class GuildConfigRepository {
         updated_at: now,
       };
 
-      this.db.prepare(`
-        UPDATE guild_configs SET
-          autonomy_mode = ?,
-          admin_role_ids = ?,
-          support_channel_ids = ?,
-          allowed_domains = ?,
-          connected_repos = ?,
-          retention_days = ?,
-          require_response_approval = ?,
-          updated_at = ?
-        WHERE guild_id = ?
-      `).run(
-        updated.autonomy_mode,
-        JSON.stringify(updated.admin_role_ids),
-        JSON.stringify(updated.support_channel_ids),
-        JSON.stringify(updated.allowed_domains),
-        JSON.stringify(updated.connected_repos),
-        updated.retention_days,
-        updated.require_response_approval ? 1 : 0,
-        now,
-        config.guild_id
+      await this.collection.updateOne(
+        { guild_id: config.guild_id },
+        { $set: { ...updated } }
       );
 
       return updated;
@@ -72,31 +57,13 @@ export class GuildConfigRepository {
         updated_at: now,
       };
 
-      this.db.prepare(`
-        INSERT INTO guild_configs (
-          guild_id, autonomy_mode, admin_role_ids, support_channel_ids,
-          allowed_domains, connected_repos, retention_days, require_response_approval,
-          created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        created.guild_id,
-        created.autonomy_mode,
-        JSON.stringify(created.admin_role_ids),
-        JSON.stringify(created.support_channel_ids),
-        JSON.stringify(created.allowed_domains),
-        JSON.stringify(created.connected_repos),
-        created.retention_days,
-        created.require_response_approval ? 1 : 0,
-        now,
-        now
-      );
-
+      await this.collection.insertOne({ ...created });
       return created;
     }
   }
 
-  isSupportChannel(guildId: string, channelId: string, parentId?: string | null): boolean {
-    const config = this.get(guildId);
+  async isSupportChannel(guildId: string, channelId: string, parentId?: string | null): Promise<boolean> {
+    const config = await this.get(guildId);
     if (!config) return false;
     // One-time setup requirement: Server must have explicitly configured support channels
     if (!config.support_channel_ids || config.support_channel_ids.length === 0) {
@@ -107,25 +74,25 @@ export class GuildConfigRepository {
     return false;
   }
 
-  isAdmin(guildId: string, userRoleIds: string[]): boolean {
-    const config = this.get(guildId);
+  async isAdmin(guildId: string, userRoleIds: string[]): Promise<boolean> {
+    const config = await this.get(guildId);
     if (!config) return false;
     if (config.admin_role_ids.length === 0) return true; // If no roles configured yet, allow server admins
     return config.admin_role_ids.some(r => userRoleIds.includes(r));
   }
 
-  private mapRow(row: Record<string, unknown>): GuildConfig {
+  private mapDoc(doc: Record<string, unknown>): GuildConfig {
     return {
-      guild_id: String(row.guild_id),
-      autonomy_mode: row.autonomy_mode as 'observe' | 'supervised' | 'auto',
-      admin_role_ids: JSON.parse((row.admin_role_ids as string) || '[]'),
-      support_channel_ids: JSON.parse((row.support_channel_ids as string) || '[]'),
-      allowed_domains: JSON.parse((row.allowed_domains as string) || '[]'),
-      connected_repos: JSON.parse((row.connected_repos as string) || '[]'),
-      retention_days: Number(row.retention_days || 90),
-      require_response_approval: Number(row.require_response_approval) === 1,
-      created_at: String(row.created_at),
-      updated_at: String(row.updated_at),
+      guild_id: String(doc.guild_id),
+      autonomy_mode: doc.autonomy_mode as 'observe' | 'supervised' | 'auto',
+      admin_role_ids: Array.isArray(doc.admin_role_ids) ? doc.admin_role_ids.map(String) : [],
+      support_channel_ids: Array.isArray(doc.support_channel_ids) ? doc.support_channel_ids.map(String) : [],
+      allowed_domains: Array.isArray(doc.allowed_domains) ? doc.allowed_domains.map(String) : [],
+      connected_repos: Array.isArray(doc.connected_repos) ? doc.connected_repos.map(String) : [],
+      retention_days: Number(doc.retention_days || 90),
+      require_response_approval: Boolean(doc.require_response_approval),
+      created_at: String(doc.created_at),
+      updated_at: String(doc.updated_at),
     };
   }
 }

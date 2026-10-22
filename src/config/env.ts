@@ -12,10 +12,9 @@ const envSchema = z.object({
   DISCORD_CLIENT_ID: z.string().default('123456789012345678'),
   DISCORD_DEV_GUILD_ID: z.string().optional(),
 
-  // Database Configuration (Dual Provider: SQLite / MongoDB Atlas)
-  DATABASE_PROVIDER: z.enum(['sqlite', 'mongodb']).default('sqlite'),
-  DATABASE_PATH: z.string().default('./data/threadsherpa.sqlite'),
-  MONGODB_URI: z.string().optional(),
+  // Unified Database: MongoDB / MongoDB Atlas
+  DATABASE_PROVIDER: z.string().default('mongodb'),
+  MONGODB_URI: z.string().default('mongodb://localhost:27017/threadsherpa'),
   MONGODB_DB_NAME: z.string().default('threadsherpa'),
 
   // Model Provider Selection & Cloud APIs
@@ -65,11 +64,6 @@ export function loadConfig(overrides?: Partial<Record<string, unknown>>): AppCon
     ...process.env,
     ...(overrides || {}),
   };
-
-  // Auto-detect MongoDB if MONGODB_URI is provided and DATABASE_PROVIDER was not explicitly set
-  if (rawEnv.MONGODB_URI && !rawEnv.DATABASE_PROVIDER) {
-    rawEnv.DATABASE_PROVIDER = 'mongodb';
-  }
 
   const result = envSchema.safeParse(rawEnv);
   if (!result.success) {

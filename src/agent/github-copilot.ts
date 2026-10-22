@@ -21,12 +21,12 @@ export class GitHubCopilot {
   ) {}
 
   async prepareDraft(caseId: string, creatorId: string): Promise<{ link: GitHubLink; draft: GitHubIssueDraft }> {
-    const supportCase = this.caseRepo.get(caseId);
+    const supportCase = await this.caseRepo.get(caseId);
     if (!supportCase) {
       throw new Error(`Case ${caseId} not found`);
     }
 
-    const guildConfig = this.guildRepo.get(supportCase.guild_id);
+    const guildConfig = await this.guildRepo.get(supportCase.guild_id);
     const connectedRepos = guildConfig?.connected_repos || [];
     if (connectedRepos.length === 0) {
       throw new Error(`No connected GitHub repository configured for this server. Use /setup to configure a repository.`);
@@ -40,7 +40,7 @@ export class GitHubCopilot {
     const potentialDuplicates = searchResults.map(r => r.number);
 
     // 2. Collect case evidence
-    const evidence = this.evidenceRepo.getByCaseId(caseId);
+    const evidence = await this.evidenceRepo.getByCaseId(caseId);
     const evidenceText = evidence.map(e => `- [${e.source_type}] ${e.title || e.source_url || 'ref'}: ${e.excerpt}`).join('\n');
 
     // 3. Draft structured issue
@@ -121,7 +121,7 @@ ${safeDuplicates.length > 0 ? `\n### Potential Duplicates\n${safeDuplicates.map(
 `;
 
     const linkId = `gh_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const savedLink = this.githubRepo.createDraft({
+    const savedLink = await this.githubRepo.createDraft({
       link_id: linkId,
       case_id: caseId,
       repo_owner: owner,
@@ -131,7 +131,7 @@ ${safeDuplicates.length > 0 ? `\n### Potential Duplicates\n${safeDuplicates.map(
       created_by: creatorId,
     });
 
-    this.auditRepo.log({
+    await this.auditRepo.log({
       guild_id: supportCase.guild_id,
       actor_id: creatorId,
       action: 'github_issue_draft_created',
@@ -146,7 +146,7 @@ ${safeDuplicates.length > 0 ? `\n### Potential Duplicates\n${safeDuplicates.map(
   }
 
   async publishIssue(linkId: string, approverId: string): Promise<GitHubLink> {
-    const link = this.githubRepo.get(linkId);
+    const link = await this.githubRepo.get(linkId);
     if (!link) {
       throw new Error(`Draft ${linkId} not found`);
     }
@@ -155,13 +155,13 @@ ${safeDuplicates.length > 0 ? `\n### Potential Duplicates\n${safeDuplicates.map(
       return link; // Idempotent
     }
 
-    const supportCase = this.caseRepo.get(link.case_id);
+    const supportCase = await this.caseRepo.get(link.case_id);
     if (!supportCase) {
       throw new Error(`Associated case ${link.case_id} not found`);
     }
 
     // Check allowlist
-    const guildConfig = this.guildRepo.get(supportCase.guild_id);
+    const guildConfig = await this.guildRepo.get(supportCase.guild_id);
     const repoStr = `${link.repo_owner}/${link.repo_name}`;
     if (!guildConfig?.connected_repos.includes(repoStr)) {
       throw new Error(`Repository ${repoStr} is not on the server allowlist`);
@@ -176,14 +176,14 @@ ${safeDuplicates.length > 0 ? `\n### Potential Duplicates\n${safeDuplicates.map(
     );
 
     // Update link record
-    const updated = this.githubRepo.markCreated(
+    const updated = await this.githubRepo.markCreated(
       linkId,
       created.number,
       created.htmlUrl,
       approverId
     );
 
-    this.auditRepo.log({
+    await this.auditRepo.log({
       guild_id: supportCase.guild_id,
       actor_id: approverId,
       action: 'github_issue_published',

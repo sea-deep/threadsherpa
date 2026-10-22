@@ -65,18 +65,17 @@ Extract:
     }
 
     // Check for conflicting or similar existing approved items
-    const existingApproved = this.knowledgeRepo.getApproved(options.guildId);
     const conflictingItems: KnowledgeItem[] = [];
 
     if (embedding) {
-      const similar = this.knowledgeRepo.searchVector(options.guildId, embedding, 3, 0.7);
+      const similar = await this.knowledgeRepo.searchVector(options.guildId, embedding, 3, 0.7);
       for (const item of similar) {
         conflictingItems.push(item);
       }
     }
 
     // Save candidate
-    const candidate = this.knowledgeRepo.createCandidate({
+    const candidate = await this.knowledgeRepo.createCandidate({
       knowledge_id: knowledgeId,
       guild_id: options.guildId,
       question_patterns: extraction.question_patterns,
@@ -92,7 +91,7 @@ Extract:
     });
 
     // Record audit event
-    this.auditRepo.log({
+    await this.auditRepo.log({
       guild_id: options.guildId,
       actor_id: options.adminUserId,
       action: 'knowledge_candidate_proposed',
@@ -122,10 +121,10 @@ Extract:
     };
   }
 
-  approveCandidate(knowledgeId: string, reviewerId: string, notes?: string): KnowledgeItem | null {
-    const approved = this.knowledgeRepo.approve(knowledgeId, reviewerId, notes);
+  async approveCandidate(knowledgeId: string, reviewerId: string, notes?: string): Promise<KnowledgeItem | null> {
+    const approved = await this.knowledgeRepo.approve(knowledgeId, reviewerId, notes);
     if (approved) {
-      this.auditRepo.log({
+      await this.auditRepo.log({
         guild_id: approved.guild_id,
         actor_id: reviewerId,
         action: 'knowledge_approved',
@@ -138,10 +137,10 @@ Extract:
     return approved;
   }
 
-  rejectCandidate(knowledgeId: string, reviewerId: string, notes?: string): KnowledgeItem | null {
-    const rejected = this.knowledgeRepo.reject(knowledgeId, reviewerId, notes);
+  async rejectCandidate(knowledgeId: string, reviewerId: string, notes?: string): Promise<KnowledgeItem | null> {
+    const rejected = await this.knowledgeRepo.reject(knowledgeId, reviewerId, notes);
     if (rejected) {
-      this.auditRepo.log({
+      await this.auditRepo.log({
         guild_id: rejected.guild_id,
         actor_id: reviewerId,
         action: 'knowledge_rejected',
@@ -154,7 +153,7 @@ Extract:
     return rejected;
   }
 
-  correctAndSupersede(
+  async correctAndSupersede(
     knowledgeId: string,
     correction: {
       canonical_answer: string;
@@ -164,10 +163,10 @@ Extract:
       change_reason?: string;
     },
     reviewerId: string
-  ): KnowledgeItem | null {
-    const updated = this.knowledgeRepo.correctAndSupersede(knowledgeId, correction, reviewerId);
+  ): Promise<KnowledgeItem | null> {
+    const updated = await this.knowledgeRepo.correctAndSupersede(knowledgeId, correction, reviewerId);
     if (updated) {
-      this.auditRepo.log({
+      await this.auditRepo.log({
         guild_id: updated.guild_id,
         actor_id: reviewerId,
         action: 'knowledge_superseded',

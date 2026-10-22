@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
+import type { Db } from 'mongodb';
 import {
   ChatInputCommandInteraction,
   ButtonInteraction,
   Message,
   PermissionsBitField,
 } from 'discord.js';
-import { createDatabase } from '../../src/database/connection.js';
-import { runMigrations } from '../../src/database/migrator.js';
+import { connectDatabase, closeDatabase } from '../../src/database/connection.js';
+import { clearMemoryDatabases } from '../../src/database/memory-db.js';
 import { GuildConfigRepository } from '../../src/database/repositories/guild-config.repo.js';
 import { CaseRepository } from '../../src/database/repositories/case.repo.js';
 import { EvidenceRepository } from '../../src/database/repositories/evidence.repo.js';
@@ -26,8 +26,8 @@ import { GitHubCopilot } from '../../src/agent/github-copilot.js';
 import { IncidentDetector } from '../../src/agent/incident-detector.js';
 import { BotInteractionRouter } from '../../src/bot/handlers/router.js';
 
-describe('BotInteractionRouter & Discord Gateway Integration', () => {
-  let db: DatabaseSync;
+describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
+  let db: Db;
   let guildRepo: GuildConfigRepository;
   let caseRepo: CaseRepository;
   let evidenceRepo: EvidenceRepository;
@@ -78,9 +78,10 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     healthCheck: vi.fn().mockResolvedValue({ ok: true, models: [], selectedModelAvailable: true, embeddingModelAvailable: true }),
   };
 
-  beforeEach(() => {
-    db = createDatabase({ inMemory: true });
-    runMigrations(db);
+  beforeEach(async () => {
+    clearMemoryDatabases();
+    const conn = await connectDatabase({ inMemory: true });
+    db = conn.db;
 
     guildRepo = new GuildConfigRepository(db);
     caseRepo = new CaseRepository(db);
@@ -90,7 +91,7 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     githubRepo = new GitHubRepository(db);
     auditRepo = new AuditRepository(db);
 
-    guildRepo.upsert({
+    await guildRepo.upsert({
       guild_id: guildId,
       autonomy_mode: 'supervised',
       support_channel_ids: [supportChannelId],
@@ -106,7 +107,6 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     const toolRegistry = new ToolRegistry(memoryRetriever, safeFetcher, githubClient, caseRepo, evidenceRepo);
 
     const orchestrator = new AgentOrchestrator(
-      db,
       caseRepo,
       evidenceRepo,
       guildRepo,
@@ -140,8 +140,8 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     );
   });
 
-  afterEach(() => {
-    db.close();
+  afterEach(async () => {
+    await closeDatabase();
   });
 
   it('handles /setup command and updates server configuration', async () => {
@@ -174,7 +174,7 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     await router.handleCommand(interaction);
 
     expect(replyMock).toHaveBeenCalled();
-    const config = guildRepo.get(guildId);
+    const config = await guildRepo.get(guildId);
     expect(config?.support_channel_ids).toContain('chan_new_support');
     expect(config?.admin_role_ids).toContain('role_new_admin');
     expect(config?.allowed_domains).toContain('api.github.com');
@@ -208,8 +208,8 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     expect(deferReplyMock).toHaveBeenCalled();
     expect(editReplyMock).toHaveBeenCalled();
 
-    // Verify support case was created in SQLite
-    const activeCase = caseRepo.findActiveCase(supportChannelId);
+    // Verify support case was created in MongoDB
+    const activeCase = await caseRepo.findActiveCase(supportChannelId);
     expect(activeCase).toBeDefined();
     expect(activeCase?.requester_id).toBe('user_david');
     expect(['answered', 'awaiting_user']).toContain(activeCase?.status);
@@ -244,14 +244,14 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     expect(deferReplyMock).toHaveBeenCalledWith({ ephemeral: true });
     expect(editReplyMock).toHaveBeenCalled();
 
-    const pending = knowledgeRepo.getPendingCandidates(guildId);
+    const pending = await knowledgeRepo.getPendingCandidates(guildId);
     expect(pending.length).toBe(1);
     expect(pending[0].canonical_answer).toContain('exponential backoff');
   });
 
   it('handles button clicks for approving and rejecting knowledge candidates', async () => {
     // Propose candidate
-    const candidate = knowledgeRepo.createCandidate({
+    const candidate = await knowledgeRepo.createCandidate({
       knowledge_id: 'know_btn_test',
       guild_id: guildId,
       question_patterns: ['Test question'],
@@ -274,13 +274,13 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     await router.handleButton(btnInteraction);
 
     expect(updateMock).toHaveBeenCalled();
-    const approved = knowledgeRepo.get('know_btn_test');
+    const approved = await knowledgeRepo.get('know_btn_test');
     expect(approved?.approval_status).toBe('approved');
   });
 
   it('triggers admin learning when an admin replies to an active case in a support channel', async () => {
     // Create open case
-    caseRepo.create({
+    await caseRepo.create({
       case_id: 'case_user_help',
       guild_id: guildId,
       channel_id: supportChannelId,
@@ -310,7 +310,7 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     await router.handleMessage(adminMsg);
 
     expect(replyMock).toHaveBeenCalled();
-    const pending = knowledgeRepo.getPendingCandidates(guildId);
+    const pending = await knowledgeRepo.getPendingCandidates(guildId);
     expect(pending.length).toBe(1);
     expect(pending[0].canonical_answer).toContain('exponential backoff');
   });
@@ -336,14 +336,14 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
 
     // Should not reply and should not create any support case
     expect(replyMock).not.toHaveBeenCalled();
-    const activeCase = caseRepo.findActiveCase(unconfiguredChannelId);
+    const activeCase = await caseRepo.findActiveCase(unconfiguredChannelId);
     expect(activeCase).toBeNull();
   });
 
   it('scans and responds to new forum posts and threads inside configured channels', async () => {
     const forumChannelId = 'forum_troubleshooting';
     // Add forum to configured support channels
-    guildRepo.upsert({
+    await guildRepo.upsert({
       guild_id: guildId,
       support_channel_ids: [supportChannelId, forumChannelId],
     });
@@ -366,7 +366,7 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     await router.handleThreadCreate(forumThread);
 
     expect(threadSendMock).toHaveBeenCalled();
-    const createdCase = caseRepo.getByThreadId('thread_forum_post_1');
+    const createdCase = await caseRepo.getByThreadId('thread_forum_post_1');
     expect(createdCase).toBeDefined();
     expect(createdCase?.title).toBe('V8 compilation failure with node 26');
     expect(createdCase?.summary).toContain('better-sqlite3');
@@ -374,7 +374,7 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
 
   it('updates case context when user provides follow-up logs in an active thread', async () => {
     const activeThreadId = 'thread_user_context_test';
-    const initialCase = caseRepo.create({
+    const initialCase = await caseRepo.create({
       case_id: 'case_context_tracking',
       guild_id: guildId,
       channel_id: supportChannelId,
@@ -409,12 +409,12 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     await router.handleMessage(followUpMsg);
 
     // Verify context was appended to case summary
-    const updated = caseRepo.get(initialCase.case_id);
+    const updated = await caseRepo.get(initialCase.case_id);
     expect(updated?.summary).toContain('lsof output');
     expect(updated?.summary).toContain('node process 5821');
 
     // Verify evidence record was appended
-    const evidenceList = evidenceRepo.getByCaseId(initialCase.case_id);
+    const evidenceList = await evidenceRepo.getByCaseId(initialCase.case_id);
     const contextEv = evidenceList.find(e => e.source_type === 'discord_message' && e.metadata?.subtype === 'user_context');
     expect(contextEv).toBeDefined();
     expect(contextEv?.excerpt).toContain('node process 5821');
@@ -422,7 +422,7 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
   });
 
   it('allows manual context updates via /case update_context', async () => {
-    const c = caseRepo.create({
+    const c = await caseRepo.create({
       case_id: 'case_manual_update',
       guild_id: guildId,
       channel_id: supportChannelId,
@@ -455,7 +455,7 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     await router.handleCommand(interaction);
 
     expect(replyMock).toHaveBeenCalled();
-    const updated = caseRepo.get(c.case_id);
+    const updated = await caseRepo.get(c.case_id);
     expect(updated?.summary).toContain('OOM killed by kernel');
   });
 });

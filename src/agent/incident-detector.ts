@@ -19,26 +19,26 @@ export class IncidentDetector {
     private auditRepo: AuditRepository
   ) {}
 
-  detectCluster(currentCase: SupportCase): IncidentDetectionResult {
+  async detectCluster(currentCase: SupportCase): Promise<IncidentDetectionResult> {
     // 1. Search for similar open cases in the same guild
-    const similarCases = this.caseRepo.searchSimilarCases(currentCase.guild_id, currentCase.title, 6)
-      .filter(c => c.case_id !== currentCase.case_id && c.status !== 'closed');
+    const rawSimilar = await this.caseRepo.searchSimilarCases(currentCase.guild_id, currentCase.title, 6);
+    const similarCases = rawSimilar.filter(c => c.case_id !== currentCase.case_id && c.status !== 'closed');
 
     if (similarCases.length === 0) {
       return { clusterFound: false, isNewIncident: false, affectedCasesCount: 1 };
     }
 
     // 2. Check if any similar case is already linked to an active incident
-    const activeIncidents = this.incidentRepo.findActiveIncidents(currentCase.guild_id);
+    const activeIncidents = await this.incidentRepo.findActiveIncidents(currentCase.guild_id);
 
     for (const incident of activeIncidents) {
-      const linkedCaseIds = this.incidentRepo.getLinkedCases(incident.incident_id);
+      const linkedCaseIds = await this.incidentRepo.getLinkedCases(incident.incident_id);
       const isRelated = similarCases.some(c => linkedCaseIds.includes(c.case_id));
 
       if (isRelated) {
         // Link to existing incident
-        this.incidentRepo.linkCase(incident.incident_id, currentCase.case_id);
-        const updated = this.incidentRepo.get(incident.incident_id);
+        await this.incidentRepo.linkCase(incident.incident_id, currentCase.case_id);
+        const updated = await this.incidentRepo.get(incident.incident_id);
 
         logger.info({ incidentId: incident.incident_id, caseId: currentCase.case_id }, 'Linked case to existing incident');
 
@@ -56,7 +56,7 @@ export class IncidentDetector {
       const incidentId = `inc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const symptomClusterKey = currentCase.category || 'general_cluster';
 
-      const newIncident = this.incidentRepo.create({
+      const newIncident = await this.incidentRepo.create({
         incident_id: incidentId,
         guild_id: currentCase.guild_id,
         title: `Possible Incident: ${currentCase.title.slice(0, 80)}`,
@@ -66,12 +66,12 @@ export class IncidentDetector {
       });
 
       // Link current case and the matching similar cases
-      this.incidentRepo.linkCase(incidentId, currentCase.case_id);
+      await this.incidentRepo.linkCase(incidentId, currentCase.case_id);
       for (const simCase of similarCases.slice(0, 3)) {
-        this.incidentRepo.linkCase(incidentId, simCase.case_id);
+        await this.incidentRepo.linkCase(incidentId, simCase.case_id);
       }
 
-      this.auditRepo.log({
+      await this.auditRepo.log({
         guild_id: currentCase.guild_id,
         actor_id: 'system',
         action: 'incident_candidate_created',
@@ -93,10 +93,10 @@ export class IncidentDetector {
     return { clusterFound: false, isNewIncident: false, affectedCasesCount: 1 };
   }
 
-  confirmIncident(incidentId: string, adminUserId: string, notes?: string): Incident | null {
-    const updated = this.incidentRepo.updateVerification(incidentId, 'confirmed', notes);
+  async confirmIncident(incidentId: string, adminUserId: string, notes?: string): Promise<Incident | null> {
+    const updated = await this.incidentRepo.updateVerification(incidentId, 'confirmed', notes);
     if (updated) {
-      this.auditRepo.log({
+      await this.auditRepo.log({
         guild_id: updated.guild_id,
         actor_id: adminUserId,
         action: 'incident_confirmed',
@@ -108,10 +108,10 @@ export class IncidentDetector {
     return updated;
   }
 
-  resolveIncident(incidentId: string, adminUserId: string, resolutionNotes?: string): Incident | null {
-    const updated = this.incidentRepo.updateVerification(incidentId, 'resolved', resolutionNotes);
+  async resolveIncident(incidentId: string, adminUserId: string, resolutionNotes?: string): Promise<Incident | null> {
+    const updated = await this.incidentRepo.updateVerification(incidentId, 'resolved', resolutionNotes);
     if (updated) {
-      this.auditRepo.log({
+      await this.auditRepo.log({
         guild_id: updated.guild_id,
         actor_id: adminUserId,
         action: 'incident_resolved',

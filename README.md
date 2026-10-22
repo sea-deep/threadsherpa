@@ -18,7 +18,7 @@ Unlike generic FAQ bots or chat wrappers that blindly treat every message as mem
 | Hallucinates solutions when information is missing | Enforces deterministic response policy and asks targeted follow-ups |
 | Single-turn prompt-response loop | Bounded autonomous investigation loop (Plan -> Act -> Evaluate -> Stop) |
 | Relies exclusively on expensive proprietary APIs | Flexible: Paper Instruments (`ultramarine-1-flash`), local open-weights (`gemma4`), or cloud APIs |
-| Ephemeral in-memory context lost on restart | Durable persistence: SQLite (`node:sqlite` + FTS5) or MongoDB Atlas (Vector Search) |
+| Ephemeral in-memory context lost on restart | Durable persistence: MongoDB Atlas (Vector Search & Text Indexes) with local memory fallback |
 | Ignores developer tools and repositories | Searches connected GitHub repos, checks duplicates, and drafts issues |
 | Treats repeated complaints as isolated tickets | Detects shared incident clusters and alerts administrators to outages |
 | Unmonitored execution | Sentry Agent Tracing instrumenting tool calls, inference, and spans |
@@ -42,7 +42,7 @@ The fundamental differentiator of ThreadSherpa is its closed feedback loop:
          │
   [6. APPROVE] ──────> Admin reviews Discord Review Card: [Approve] [Reject]
          │
-  [7. REMEMBER] ─────> Versioned record committed to SQLite/Atlas + Vector index
+  [7. REMEMBER] ─────> Versioned record committed to MongoDB Atlas + Vector index
          │
   [8. RECALL] ───────> Next member asks paraphrased question: immediate recall!
 ```
@@ -94,10 +94,10 @@ ThreadSherpa is designed as a modular monolith with strict separation between de
         |                      |                     |                      |
         v                      v                     v                      v
 +---------------+      +---------------+     +---------------+      +---------------+
-| Dual DB:      |      | Ollama Local  |     | Web Fetcher   |      | Sentry Spans  |
-| - SQLite/FTS5 |      | Gemma 4 /     |     | (SSRF Guard)  |      | Audit Trail   |
-| - Mongo Atlas |      | EmbeddingGem. |     | SerpApi Web   |      | Role Controls |
-|   Vector Srch |      | 768-dim Vecs  |     | GitHub API    |      | Auth Defense  |
+| Mongo Atlas:  |      | Ollama Local  |     | Web Fetcher   |      | Sentry Spans  |
+| - Vector Srch |      | Gemma 4 /     |     | (SSRF Guard)  |      | Audit Trail   |
+| - Text Index  |      | EmbeddingGem. |     | SerpApi Web   |      | Role Controls |
+| - Document DB |      | 768-dim Vecs  |     | GitHub API    |      | Auth Defense  |
 +---------------+      +---------------+     +---------------+      +---------------+
 ```
 
@@ -173,13 +173,13 @@ PAPER_MODEL=ultramarine-1-flash
 # OPENAI_MODEL=gemini-2.0-flash
 # (Or Groq: GROQ_API_KEY=your_groq_key, or OpenAI: OPENAI_API_KEY=your_key)
 
-# Database Provider: 'sqlite' (default) or 'mongodb'
-DATABASE_PROVIDER=sqlite
-DATABASE_PATH=./data/threadsherpa.sqlite
-
-# If using MongoDB Atlas:
-# DATABASE_PROVIDER=mongodb
+# Unified Database: MongoDB / MongoDB Atlas
+DATABASE_PROVIDER=mongodb
+# For cloud/production (Render, Atlas):
 # MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.mongodb.net/threadsherpa?retryWrites=true&w=majority
+# For local dev / offline testing (zero external dependencies):
+MONGODB_URI=memory://
+MONGODB_DB_NAME=threadsherpa
 
 # Optional Partner Tooling:
 # SENTRY_DSN=https://examplePublicKey@o0.ingest.sentry.io/0

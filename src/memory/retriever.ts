@@ -29,10 +29,10 @@ export class MemoryRetriever {
     }
 
     // Hybrid search approved knowledge
-    const knowledge = this.knowledgeRepo.searchHybrid(guildId, query, queryEmbedding, limit);
+    const knowledge = await this.knowledgeRepo.searchHybrid(guildId, query, queryEmbedding, limit);
 
     // Search similar historical cases
-    const similarCases = this.caseRepo.searchSimilarCases(guildId, query, limit);
+    const similarCases = await this.caseRepo.searchSimilarCases(guildId, query, limit);
 
     return {
       knowledge,

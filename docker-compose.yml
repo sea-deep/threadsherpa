@@ -7,15 +7,25 @@ services:
     restart: unless-stopped
     env_file:
       - .env
-    volumes:
-      - threadsherpa_data:/app/data
     environment:
       - NODE_ENV=production
-      - DATABASE_PATH=/app/data/threadsherpa.sqlite
+      - DATABASE_PROVIDER=mongodb
+      - MONGODB_URI=mongodb://mongodb:27017/threadsherpa
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    depends_on:
+      - mongodb
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  mongodb:
+    image: mongo:7-jammy
+    container_name: threadsherpa_mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
 volumes:
-  threadsherpa_data:
+  mongodb_data:
     driver: local

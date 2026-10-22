@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
-import { createDatabase } from '../../src/database/connection.js';
-import { runMigrations } from '../../src/database/migrator.js';
+import type { Db } from 'mongodb';
+import { connectDatabase, closeDatabase } from '../../src/database/connection.js';
 import { CaseRepository } from '../../src/database/repositories/case.repo.js';
 import { EvidenceRepository } from '../../src/database/repositories/evidence.repo.js';
 import { GitHubRepository } from '../../src/database/repositories/github.repo.js';
@@ -11,8 +10,8 @@ import { GitHubCopilot } from '../../src/agent/github-copilot.js';
 import { GitHubClient } from '../../src/integrations/github/github.client.js';
 import { ModelProvider } from '../../src/integrations/model/model-provider.interface.js';
 
-describe('GitHub Issue Copilot', () => {
-  let db: DatabaseSync;
+describe('GitHub Issue Copilot (MongoDB)', () => {
+  let db: Db;
   let caseRepo: CaseRepository;
   let evidenceRepo: EvidenceRepository;
   let githubRepo: GitHubRepository;
@@ -58,9 +57,9 @@ describe('GitHub Issue Copilot', () => {
     title: 'Fix SQLite compilation crash on Node 26',
   });
 
-  beforeEach(() => {
-    db = createDatabase({ inMemory: true });
-    runMigrations(db);
+  beforeEach(async () => {
+    const conn = await connectDatabase({ inMemory: true });
+    db = conn.db;
 
     caseRepo = new CaseRepository(db);
     evidenceRepo = new EvidenceRepository(db);
@@ -68,7 +67,7 @@ describe('GitHub Issue Copilot', () => {
     guildRepo = new GuildConfigRepository(db);
     auditRepo = new AuditRepository(db);
 
-    guildRepo.upsert({
+    await guildRepo.upsert({
       guild_id: guildId,
       connected_repos: ['sea-deep/threadsherpa'],
     });
@@ -84,12 +83,12 @@ describe('GitHub Issue Copilot', () => {
     );
   });
 
-  afterEach(() => {
-    db.close();
+  afterEach(async () => {
+    await closeDatabase();
   });
 
   it('prepares structured duplicate-checked GitHub issue draft', async () => {
-    caseRepo.create({
+    await caseRepo.create({
       case_id: 'case_gh_1',
       guild_id: guildId,
       channel_id: 'chan_1',
@@ -110,7 +109,7 @@ describe('GitHub Issue Copilot', () => {
   });
 
   it('publishes issue after approval and records API issue number', async () => {
-    caseRepo.create({
+    await caseRepo.create({
       case_id: 'case_gh_2',
       guild_id: guildId,
       channel_id: 'chan_1',
@@ -131,7 +130,7 @@ describe('GitHub Issue Copilot', () => {
   });
 
   it('rejects publishing if repo is not on guild allowlist', async () => {
-    caseRepo.create({
+    await caseRepo.create({
       case_id: 'case_gh_3',
       guild_id: guildId,
       channel_id: 'chan_1',
@@ -143,13 +142,14 @@ describe('GitHub Issue Copilot', () => {
       status: 'new',
     });
 
-    const draft = githubRepo.createDraft({
+    const draft = await githubRepo.createDraft({
       link_id: 'link_unauthorized_repo',
       case_id: 'case_gh_3',
       repo_owner: 'unauthorized-org',
       repo_name: 'private-repo',
       draft_title: 'Unallowed repo issue',
       draft_body: 'Body',
+      status: 'draft',
       created_by: 'u3',
     });
 

@@ -18,13 +18,11 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
-COPY src/database/migrations ./dist/database/migrations
 
-# Create persistent data directory for SQLite
+# Create runtime directory
 RUN mkdir -p /app/data && chown -R node:node /app/data
 
 USER node
-VOLUME ["/app/data"]
 
 EXPOSE 3000
 

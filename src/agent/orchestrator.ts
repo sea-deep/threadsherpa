@@ -1,4 +1,3 @@
-import { DatabaseSync } from 'node:sqlite';
 import { ModelProvider } from '../integrations/model/model-provider.interface.js';
 import { CaseRepository } from '../database/repositories/case.repo.js';
 import { EvidenceRepository } from '../database/repositories/evidence.repo.js';
@@ -9,9 +8,7 @@ import {
   InvestigationPlanSchema,
   GroundedAnswerDraftSchema,
   GroundedAnswerDraft,
-  SupportCaseClassificationSchema,
 } from './schemas.js';
-import { SupportCase } from '../domain/case.js';
 import { logger } from '../utils/logger.js';
 
 export interface InvestigationResult {
@@ -25,7 +22,6 @@ export class AgentOrchestrator {
   private policy: ResponsePolicy;
 
   constructor(
-    private db: DatabaseSync,
     private caseRepo: CaseRepository,
     private evidenceRepo: EvidenceRepository,
     private guildRepo: GuildConfigRepository,
@@ -38,12 +34,12 @@ export class AgentOrchestrator {
   }
 
   async investigateCase(caseId: string): Promise<InvestigationResult> {
-    const supportCase = this.caseRepo.get(caseId);
+    const supportCase = await this.caseRepo.get(caseId);
     if (!supportCase) {
       throw new Error(`Case ${caseId} not found`);
     }
 
-    const guildConfig = this.guildRepo.get(supportCase.guild_id);
+    const guildConfig = await this.guildRepo.get(supportCase.guild_id);
     const allowedDomains = guildConfig?.allowed_domains || [];
     const connectedRepos = guildConfig?.connected_repos || [];
 
@@ -55,7 +51,7 @@ export class AgentOrchestrator {
     };
 
     // Update case status to investigating
-    this.caseRepo.updateStatus(caseId, 'investigating');
+    await this.caseRepo.updateStatus(caseId, 'investigating');
     const runId = `run_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
     const startTime = new Date().toISOString();
 
@@ -74,7 +70,7 @@ export class AgentOrchestrator {
       if (topMatch && topMatch.similarity >= 0.70) {
         logger.info({ caseId, similarity: topMatch.similarity }, 'Found high-confidence approved knowledge match');
 
-        const evidence = this.evidenceRepo.getByCaseId(caseId);
+        const evidence = await this.evidenceRepo.getByCaseId(caseId);
         const policyResult = this.policy.evaluate(
           {
             can_answer_confidently: true,
@@ -95,9 +91,9 @@ export class AgentOrchestrator {
           evidence
         );
 
-        this.recordRun(runId, caseId, 'completed', 1, toolsExecuted, 'Resolved via approved knowledge', null, startTime);
-        this.caseRepo.updateStatus(caseId, 'answered');
-        this.caseRepo.updateSummary(caseId, supportCase.summary || supportCase.title, policyResult.finalAnswer);
+        await this.recordRun(runId, caseId, 'completed', 1, toolsExecuted, 'Resolved via approved knowledge', null, startTime);
+        await this.caseRepo.updateStatus(caseId, 'answered');
+        await this.caseRepo.updateSummary(caseId, supportCase.summary || supportCase.title, policyResult.finalAnswer);
 
         return { caseId, policyResult, toolsExecuted, rounds: 1 };
       }
@@ -147,7 +143,7 @@ Create an investigation plan with missing facts and planned tool calls (max 3).`
       }
 
       // Step 4: Formulate Grounded Answer Draft
-      const evidence = this.evidenceRepo.getByCaseId(caseId);
+      const evidence = await this.evidenceRepo.getByCaseId(caseId);
       const evidenceText = evidence.map(e => `[${e.source_type} - ${e.source_url || 'ref'}]: ${e.excerpt}`).join('\n\n');
 
       const answerPrompt = `You are ThreadSherpa Support Copilot.
@@ -200,10 +196,10 @@ Rules:
           ? 'awaiting_user'
           : 'answered';
 
-      this.caseRepo.updateStatus(caseId, nextStatus);
-      this.caseRepo.updateSummary(caseId, supportCase.summary || supportCase.title, policyResult.finalAnswer);
+      await this.caseRepo.updateStatus(caseId, nextStatus);
+      await this.caseRepo.updateSummary(caseId, supportCase.summary || supportCase.title, policyResult.finalAnswer);
 
-      this.recordRun(runId, caseId, 'completed', rounds, toolsExecuted, policyResult.finalAnswer, null, startTime);
+      await this.recordRun(runId, caseId, 'completed', rounds, toolsExecuted, policyResult.finalAnswer, null, startTime);
 
       return {
         caseId,
@@ -214,8 +210,8 @@ Rules:
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error({ err, caseId }, 'Investigation run failed');
-      this.recordRun(runId, caseId, 'failed', rounds, toolsExecuted, null, msg, startTime);
-      this.caseRepo.updateStatus(caseId, 'escalated', `Investigation failure: ${msg}`);
+      await this.recordRun(runId, caseId, 'failed', rounds, toolsExecuted, null, msg, startTime);
+      await this.caseRepo.updateStatus(caseId, 'escalated', `Investigation failure: ${msg}`);
 
       return {
         caseId,
@@ -232,7 +228,7 @@ Rules:
     }
   }
 
-  private recordRun(
+  private async recordRun(
     runId: string,
     caseId: string,
     status: 'completed' | 'failed',
@@ -241,13 +237,18 @@ Rules:
     summary: string | null,
     error: string | null,
     startedAt: string
-  ): void {
+  ): Promise<void> {
     const now = new Date().toISOString();
-    this.db.prepare(`
-      INSERT INTO investigation_runs (
-        run_id, case_id, status, rounds_executed, tools_called,
-        findings_summary, error_message, started_at, completed_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(runId, caseId, status, rounds, tools, summary, error, startedAt, now);
+    await this.caseRepo.recordInvestigationRun({
+      run_id: runId,
+      case_id: caseId,
+      status,
+      rounds_executed: rounds,
+      tools_called: tools,
+      findings_summary: summary,
+      error_message: error,
+      started_at: startedAt,
+      completed_at: now,
+    });
   }
 }

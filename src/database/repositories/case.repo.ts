@@ -1,10 +1,30 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { Db } from 'mongodb';
 import { SupportCase, CaseStatus } from '../../domain/case.js';
 
-export class CaseRepository {
-  constructor(private db: DatabaseSync) {}
+export interface InvestigationRunRecord {
+  run_id: string;
+  case_id: string;
+  status: 'completed' | 'failed';
+  rounds_executed: number;
+  tools_called: number;
+  findings_summary?: string | null;
+  error_message?: string | null;
+  started_at: string;
+  completed_at: string;
+}
 
-  create(caseData: Omit<SupportCase, 'reopen_count' | 'created_at' | 'updated_at'>): SupportCase {
+export class CaseRepository {
+  constructor(private db: Db) {}
+
+  private get collection() {
+    return this.db.collection('support_cases');
+  }
+
+  private get runsCollection() {
+    return this.db.collection('investigation_runs');
+  }
+
+  async create(caseData: Omit<SupportCase, 'reopen_count' | 'created_at' | 'updated_at'>): Promise<SupportCase> {
     const now = new Date().toISOString();
     const fullCase: SupportCase = {
       ...caseData,
@@ -13,173 +33,142 @@ export class CaseRepository {
       updated_at: now,
     };
 
-    this.db.prepare(`
-      INSERT INTO support_cases (
-        case_id, guild_id, channel_id, thread_id, message_id,
-        requester_id, requester_username, category, title, status,
-        summary, last_answer, resolution_outcome, reopen_count,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      fullCase.case_id,
-      fullCase.guild_id,
-      fullCase.channel_id,
-      fullCase.thread_id || null,
-      fullCase.message_id,
-      fullCase.requester_id,
-      fullCase.requester_username,
-      fullCase.category,
-      fullCase.title,
-      fullCase.status,
-      fullCase.summary || null,
-      fullCase.last_answer || null,
-      fullCase.resolution_outcome || null,
-      fullCase.reopen_count,
-      fullCase.created_at,
-      fullCase.updated_at
-    );
-
-    // Update FTS index
-    this.db.prepare(`
-      INSERT INTO fts_cases (case_id, guild_id, title, summary)
-      VALUES (?, ?, ?, ?)
-    `).run(fullCase.case_id, fullCase.guild_id, fullCase.title, fullCase.summary || '');
-
+    await this.collection.insertOne({ ...fullCase });
     return fullCase;
   }
 
-  get(caseId: string): SupportCase | null {
-    const row = this.db.prepare('SELECT * FROM support_cases WHERE case_id = ?').get(caseId) as Record<string, unknown> | undefined;
-    if (!row) return null;
-    return this.mapRow(row);
+  async get(caseId: string): Promise<SupportCase | null> {
+    const doc = await this.collection.findOne({ case_id: caseId });
+    if (!doc) return null;
+    return this.mapDoc(doc as Record<string, unknown>);
   }
 
-  getByThreadId(threadId: string): SupportCase | null {
-    const row = this.db.prepare('SELECT * FROM support_cases WHERE thread_id = ?').get(threadId) as Record<string, unknown> | undefined;
-    if (!row) return null;
-    return this.mapRow(row);
+  async getByThreadId(threadId: string): Promise<SupportCase | null> {
+    const doc = await this.collection.findOne({ thread_id: threadId });
+    if (!doc) return null;
+    return this.mapDoc(doc as Record<string, unknown>);
   }
 
-  getByMessageId(messageId: string): SupportCase | null {
-    const row = this.db.prepare('SELECT * FROM support_cases WHERE message_id = ?').get(messageId) as Record<string, unknown> | undefined;
-    if (!row) return null;
-    return this.mapRow(row);
-  }
-
-  findActiveCase(channelId: string, threadId?: string): SupportCase | null {
+  async findActiveCase(channelId: string, threadId?: string): Promise<SupportCase | null> {
     if (threadId) {
-      const caseInThread = this.getByThreadId(threadId);
-      if (caseInThread && caseInThread.status !== 'closed') return caseInThread;
+      const doc = await this.collection.findOne({ thread_id: threadId, status: { $ne: 'closed' } });
+      if (doc) return this.mapDoc(doc as Record<string, unknown>);
     }
-    const row = this.db.prepare(`
-      SELECT * FROM support_cases
-      WHERE channel_id = ? AND status NOT IN ('closed', 'resolved')
-      ORDER BY created_at DESC LIMIT 1
-    `).get(channelId) as Record<string, unknown> | undefined;
-
-    return row ? this.mapRow(row) : null;
+    const doc = await this.collection.findOne(
+      { channel_id: channelId, status: { $nin: ['closed', 'resolved'] } },
+      { sort: { created_at: -1 } }
+    );
+    return doc ? this.mapDoc(doc as Record<string, unknown>) : null;
   }
 
-  updateStatus(caseId: string, status: CaseStatus, outcome?: string): SupportCase | null {
-    const existing = this.get(caseId);
-    if (!existing) return null;
-
+  async updateStatus(caseId: string, status: CaseStatus, outcome?: string): Promise<SupportCase | null> {
     const now = new Date().toISOString();
-    const resolvedAt = (status === 'resolved' || status === 'closed') ? now : existing.resolved_at;
+    const update: Record<string, unknown> = {
+      status,
+      updated_at: now,
+    };
+    if (status === 'resolved' || status === 'closed') {
+      update.resolved_at = now;
+    }
+    if (outcome) {
+      update.resolution_outcome = outcome;
+    }
 
-    this.db.prepare(`
-      UPDATE support_cases SET
-        status = ?,
-        resolution_outcome = COALESCE(?, resolution_outcome),
-        resolved_at = ?,
-        updated_at = ?
-      WHERE case_id = ?
-    `).run(status, outcome || null, resolvedAt || null, now, caseId);
-
-    return this.get(caseId);
+    await this.collection.updateOne({ case_id: caseId }, { $set: update });
+    return await this.get(caseId);
   }
 
-  updateSummary(caseId: string, summary: string, lastAnswer?: string): SupportCase | null {
-    const existing = this.get(caseId);
+  async reopen(caseId: string, reason?: string): Promise<SupportCase | null> {
+    const existing = await this.get(caseId);
     if (!existing) return null;
-
     const now = new Date().toISOString();
-    this.db.prepare(`
-      UPDATE support_cases SET
-        summary = ?,
-        last_answer = COALESCE(?, last_answer),
-        updated_at = ?
-      WHERE case_id = ?
-    `).run(summary, lastAnswer || null, now, caseId);
-
-    // Update FTS index
-    this.db.prepare('DELETE FROM fts_cases WHERE case_id = ?').run(caseId);
-    this.db.prepare(`
-      INSERT INTO fts_cases (case_id, guild_id, title, summary)
-      VALUES (?, ?, ?, ?)
-    `).run(caseId, existing.guild_id, existing.title, summary);
-
-    return this.get(caseId);
+    await this.collection.updateOne(
+      { case_id: caseId },
+      {
+        $set: {
+          status: 'reopened',
+          resolution_outcome: reason || null,
+          updated_at: now,
+        },
+        $inc: { reopen_count: 1 },
+      }
+    );
+    return await this.get(caseId);
   }
 
-  reopen(caseId: string, reason?: string): SupportCase | null {
-    const existing = this.get(caseId);
-    if (!existing) return null;
-
+  async updateSummary(caseId: string, summary: string, lastAnswer?: string): Promise<SupportCase | null> {
     const now = new Date().toISOString();
-    const newCount = existing.reopen_count + 1;
+    const update: Record<string, unknown> = {
+      summary,
+      updated_at: now,
+    };
+    if (lastAnswer) {
+      update.last_answer = lastAnswer;
+    }
 
-    this.db.prepare(`
-      UPDATE support_cases SET
-        status = 'reopened',
-        reopen_count = ?,
-        resolved_at = NULL,
-        resolution_outcome = COALESCE(?, resolution_outcome),
-        updated_at = ?
-      WHERE case_id = ?
-    `).run(newCount, reason ? `Reopened: ${reason}` : null, now, caseId);
-
-    return this.get(caseId);
+    await this.collection.updateOne({ case_id: caseId }, { $set: update });
+    return await this.get(caseId);
   }
 
-  searchSimilarCases(guildId: string, query: string, limit: number = 5): SupportCase[] {
-    // Sanitize query for FTS5
-    const sanitized = query.replace(/[^\w\s]/gi, ' ').trim().split(/\s+/).slice(0, 8).join(' OR ');
-    if (!sanitized) return [];
-
+  async searchSimilarCases(guildId: string, query: string, limit: number = 5): Promise<SupportCase[]> {
     try {
-      const rows = this.db.prepare(`
-        SELECT c.* FROM fts_cases f
-        JOIN support_cases c ON f.case_id = c.case_id
-        WHERE f.guild_id = ? AND fts_cases MATCH ?
-        LIMIT ?
-      `).all(guildId, sanitized, limit) as Array<Record<string, unknown>>;
+      const docs = await this.collection.find({
+        guild_id: guildId,
+        $text: { $search: query },
+      })
+      .limit(limit)
+      .toArray();
 
-      return rows.map(r => this.mapRow(r));
+      return docs.map(d => this.mapDoc(d as Record<string, unknown>));
     } catch {
-      return [];
+      const regex = new RegExp(query.split(/\s+/).slice(0, 3).join('|'), 'i');
+      const docs = await this.collection.find({
+        guild_id: guildId,
+        $or: [{ title: { $regex: regex } }, { summary: { $regex: regex } }],
+      }).limit(limit).toArray();
+
+      return docs.map(d => this.mapDoc(d as Record<string, unknown>));
     }
   }
 
-  private mapRow(row: Record<string, unknown>): SupportCase {
+  async recordInvestigationRun(run: InvestigationRunRecord): Promise<void> {
+    await this.runsCollection.insertOne({ ...run });
+  }
+
+  async getInvestigationRuns(caseId: string): Promise<InvestigationRunRecord[]> {
+    const docs = await this.runsCollection.find({ case_id: caseId }).sort({ started_at: -1 }).toArray();
+    return docs.map((d: Record<string, unknown>) => ({
+      run_id: String(d.run_id),
+      case_id: String(d.case_id),
+      status: d.status as 'completed' | 'failed',
+      rounds_executed: Number(d.rounds_executed || 0),
+      tools_called: Number(d.tools_called || 0),
+      findings_summary: d.findings_summary ? String(d.findings_summary) : null,
+      error_message: d.error_message ? String(d.error_message) : null,
+      started_at: String(d.started_at),
+      completed_at: String(d.completed_at),
+    }));
+  }
+
+  private mapDoc(doc: Record<string, unknown>): SupportCase {
     return {
-      case_id: String(row.case_id),
-      guild_id: String(row.guild_id),
-      channel_id: String(row.channel_id),
-      thread_id: row.thread_id ? String(row.thread_id) : null,
-      message_id: String(row.message_id),
-      requester_id: String(row.requester_id),
-      requester_username: String(row.requester_username),
-      category: String(row.category),
-      title: String(row.title),
-      status: row.status as CaseStatus,
-      summary: row.summary ? String(row.summary) : null,
-      last_answer: row.last_answer ? String(row.last_answer) : null,
-      resolution_outcome: row.resolution_outcome ? String(row.resolution_outcome) : null,
-      reopen_count: Number(row.reopen_count || 0),
-      created_at: String(row.created_at),
-      updated_at: String(row.updated_at),
-      resolved_at: row.resolved_at ? String(row.resolved_at) : null,
+      case_id: String(doc.case_id),
+      guild_id: String(doc.guild_id),
+      channel_id: String(doc.channel_id),
+      thread_id: doc.thread_id ? String(doc.thread_id) : null,
+      message_id: String(doc.message_id),
+      requester_id: String(doc.requester_id),
+      requester_username: String(doc.requester_username),
+      category: String(doc.category),
+      title: String(doc.title),
+      status: doc.status as CaseStatus,
+      summary: doc.summary ? String(doc.summary) : null,
+      last_answer: doc.last_answer ? String(doc.last_answer) : null,
+      resolution_outcome: doc.resolution_outcome ? String(doc.resolution_outcome) : null,
+      reopen_count: Number(doc.reopen_count || 0),
+      created_at: String(doc.created_at),
+      updated_at: String(doc.updated_at),
+      resolved_at: doc.resolved_at ? String(doc.resolved_at) : null,
     };
   }
 }

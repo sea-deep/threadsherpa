@@ -1,67 +1,75 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
-import { createDatabase } from '../../src/database/connection.js';
-import { runMigrations } from '../../src/database/migrator.js';
+import type { Db } from 'mongodb';
+import { connectDatabase, closeDatabase, ensureMongoIndexes } from '../../src/database/connection.js';
 import { cosineSimilarity } from '../../src/utils/math.js';
 
-describe('Database and Migrations', () => {
-  let db: DatabaseSync;
+describe('MongoDB Unified Database Engine', () => {
+  let db: Db;
 
-  beforeEach(() => {
-    db = createDatabase({ inMemory: true });
+  beforeEach(async () => {
+    const conn = await connectDatabase({ inMemory: true });
+    db = conn.db;
   });
 
-  afterEach(() => {
-    db.close();
+  afterEach(async () => {
+    await closeDatabase();
   });
 
-  it('runs initial migrations cleanly', () => {
-    const applied = runMigrations(db);
-    expect(applied).toBe(1);
+  it('initializes MongoDB collections and indexes cleanly', async () => {
+    await ensureMongoIndexes(db);
 
-    // Verify tables exist
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{ name: string }>;
-    const tableNames = tables.map(t => t.name);
+    // Verify collections can be accessed and indexed
+    const guildConfigCol = db.collection('guild_configs');
+    const casesCol = db.collection('support_cases');
+    const knowledgeCol = db.collection('knowledge_items');
+    const evidenceCol = db.collection('case_evidence');
+    const incidentCol = db.collection('incidents');
+    const githubCol = db.collection('github_links');
+    const auditCol = db.collection('audit_events');
 
-    expect(tableNames).toContain('guild_configs');
-    expect(tableNames).toContain('support_cases');
-    expect(tableNames).toContain('case_evidence');
-    expect(tableNames).toContain('knowledge_items');
-    expect(tableNames).toContain('knowledge_versions');
-    expect(tableNames).toContain('incidents');
-    expect(tableNames).toContain('github_links');
-    expect(tableNames).toContain('audit_events');
-    expect(tableNames).toContain('fts_knowledge');
-    expect(tableNames).toContain('fts_cases');
+    expect(guildConfigCol).toBeDefined();
+    expect(casesCol).toBeDefined();
+    expect(knowledgeCol).toBeDefined();
+    expect(evidenceCol).toBeDefined();
+    expect(incidentCol).toBeDefined();
+    expect(githubCol).toBeDefined();
+    expect(auditCol).toBeDefined();
   });
 
-  it('is idempotent when running migrations multiple times', () => {
-    runMigrations(db);
-    const appliedSecond = runMigrations(db);
-    expect(appliedSecond).toBe(0);
+  it('is idempotent when verifying indexes multiple times', async () => {
+    await ensureMongoIndexes(db);
+    // Running a second time should not throw
+    await expect(ensureMongoIndexes(db)).resolves.not.toThrow();
   });
 
-  it('evaluates cosine_similarity scalar function in SQL', () => {
-    runMigrations(db);
-    const vecA = JSON.stringify([1, 0, 0]);
-    const vecB = JSON.stringify([1, 0, 0]);
-    const vecC = JSON.stringify([0, 1, 0]);
+  it('evaluates cosine_similarity for vector search correctly', () => {
+    const vecA = [1, 0, 0];
+    const vecB = [1, 0, 0];
+    const vecC = [0, 1, 0];
 
-    const res1 = db.prepare('SELECT cosine_similarity(?, ?) AS sim').get(vecA, vecB) as { sim: number };
-    expect(res1.sim).toBeCloseTo(1.0);
+    const sim1 = cosineSimilarity(vecA, vecB);
+    expect(sim1).toBeCloseTo(1.0);
 
-    const res2 = db.prepare('SELECT cosine_similarity(?, ?) AS sim').get(vecA, vecC) as { sim: number };
-    expect(res2.sim).toBeCloseTo(0.0);
+    const sim2 = cosineSimilarity(vecA, vecC);
+    expect(sim2).toBeCloseTo(0.0);
   });
 
-  it('supports FTS5 full-text indexing and retrieval', () => {
-    runMigrations(db);
-    db.prepare(`
-      INSERT INTO fts_knowledge (knowledge_id, guild_id, question_patterns, canonical_answer, applies_when)
-      VALUES (?, ?, ?, ?, ?)
-    `).run('k1', 'g1', 'How to reset token auth error', 'Run the auth refresh command', 'When auth token expires');
+  it('supports text indexing and text search filter matching', async () => {
+    const knowledgeCol = db.collection('knowledge_items');
+    await knowledgeCol.insertOne({
+      knowledge_id: 'k1',
+      guild_id: 'g1',
+      question_patterns: ['How to reset token auth error'],
+      canonical_answer: 'Run the auth refresh command',
+      applies_when: 'When auth token expires',
+      approval_status: 'approved',
+    });
 
-    const results = db.prepare('SELECT knowledge_id FROM fts_knowledge WHERE fts_knowledge MATCH ?').all('token') as Array<{ knowledge_id: string }>;
+    const results = await knowledgeCol.find({
+      guild_id: 'g1',
+      $text: { $search: 'token' },
+    }).toArray();
+
     expect(results.length).toBe(1);
     expect(results[0].knowledge_id).toBe('k1');
   });

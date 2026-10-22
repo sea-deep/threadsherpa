@@ -44,9 +44,10 @@ ThreadSherpa is an open-source, self-hostable, autonomous Discord support copilo
         |                      |                     |                      |
         v                      v                     v                      v
 +---------------+      +---------------+     +---------------+      +---------------+
-| SQLite / FTS5 |      | Ollama Local  |     | Web Fetcher   |      | Audit Log     |
-| Embeddings DB |      | Gemma 4 /     |     | (SSRF Guard)  |      | Role-Based    |
-| Schema Migr.  |      | EmbeddingGem. |     | GitHub API    |      | Auth Controls |
+| Mongo Atlas   |      | Model Engine  |     | Web Fetcher   |      | Audit Log     |
+| - Vector Srch |      | Paper Instr.  |     | (SSRF Guard)  |      | Role-Based    |
+| - Text Index  |      | Gemma / Ollama|     | GitHub API    |      | Auth Controls |
+| - Document DB |      | Cloud APIs    |     | SerpApi Web   |      | Sentry Spans  |
 +---------------+      +---------------+     +---------------+      +---------------+
 ```
 
@@ -85,8 +86,7 @@ The application is structured as a modular TypeScript service with strict separa
 - **GitHub Link Entities (`src/domain/github.ts`)**: Drafts, duplicate search results, and API linkage records.
 
 ### `src/database/`
-- **Connection & Engine (`src/database/connection.ts`)**: SQLite with WAL mode, foreign keys, and custom vector similarity extension function.
-- **Migration Runner (`src/database/migrator.ts`)**: Version-controlled SQL migrations.
+- **Connection & Engine (`src/database/connection.ts`)**: MongoDB Atlas client with connection pooling, declarative index management, and in-memory development engine (`memory://`).
 - **Repositories (`src/database/repositories/`)**:
   - `GuildConfigRepository`: Server settings, channel configs, admin roles.
   - `CaseRepository`: Support cases and state transitions.
@@ -121,8 +121,8 @@ The application is structured as a modular TypeScript service with strict separa
 
 ### `src/memory/`
 - **Hybrid Retrieval (`src/memory/retriever.ts`)**:
-  - Lexical full-text search via SQLite FTS5.
-  - Semantic vector search via cosine distance on embeddings.
+  - Lexical full-text search via MongoDB `$text` and regex indexes.
+  - Semantic vector search via MongoDB Atlas `$vectorSearch` and exact cosine distance ranking.
   - Exact keyword and error-string matching.
   - Metadata filtering (server isolation, approval status, freshness, product scope).
 - **Learning Pipeline (`src/memory/learner.ts`)**:

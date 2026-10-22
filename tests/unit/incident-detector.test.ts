@@ -1,39 +1,41 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { DatabaseSync } from 'node:sqlite';
-import { createDatabase } from '../../src/database/connection.js';
-import { runMigrations } from '../../src/database/migrator.js';
+import type { Db } from 'mongodb';
+import { connectDatabase, closeDatabase } from '../../src/database/connection.js';
 import { CaseRepository } from '../../src/database/repositories/case.repo.js';
 import { IncidentRepository } from '../../src/database/repositories/incident.repo.js';
 import { AuditRepository } from '../../src/database/repositories/audit.repo.js';
+import { GuildConfigRepository } from '../../src/database/repositories/guild-config.repo.js';
 import { IncidentDetector } from '../../src/agent/incident-detector.js';
 
-describe('Shared Incident Detection Engine', () => {
-  let db: DatabaseSync;
+describe('Shared Incident Detection Engine (MongoDB)', () => {
+  let db: Db;
   let caseRepo: CaseRepository;
   let incidentRepo: IncidentRepository;
   let auditRepo: AuditRepository;
+  let guildRepo: GuildConfigRepository;
   let detector: IncidentDetector;
   const guildId = 'guild_incident_test';
 
-  beforeEach(() => {
-    db = createDatabase({ inMemory: true });
-    runMigrations(db);
+  beforeEach(async () => {
+    const conn = await connectDatabase({ inMemory: true });
+    db = conn.db;
 
     caseRepo = new CaseRepository(db);
     incidentRepo = new IncidentRepository(db);
     auditRepo = new AuditRepository(db);
+    guildRepo = new GuildConfigRepository(db);
     detector = new IncidentDetector(caseRepo, incidentRepo, auditRepo);
 
     // Seed guild
-    db.prepare('INSERT INTO guild_configs (guild_id) VALUES (?)').run(guildId);
+    await guildRepo.upsert({ guild_id: guildId });
   });
 
-  afterEach(() => {
-    db.close();
+  afterEach(async () => {
+    await closeDatabase();
   });
 
-  it('detects no incident on a single isolated report', () => {
-    const singleCase = caseRepo.create({
+  it('detects no incident on a single isolated report', async () => {
+    const singleCase = await caseRepo.create({
       case_id: 'case_single_1',
       guild_id: guildId,
       channel_id: 'chan_1',
@@ -45,13 +47,13 @@ describe('Shared Incident Detection Engine', () => {
       status: 'new',
     });
 
-    const result = detector.detectCluster(singleCase);
+    const result = await detector.detectCluster(singleCase);
     expect(result.clusterFound).toBe(false);
   });
 
-  it('forms a candidate incident when multiple reports share symptoms', () => {
+  it('forms a candidate incident when multiple reports share symptoms', async () => {
     // First report
-    caseRepo.create({
+    await caseRepo.create({
       case_id: 'case_outage_1',
       guild_id: guildId,
       channel_id: 'chan_1',
@@ -64,7 +66,7 @@ describe('Shared Incident Detection Engine', () => {
     });
 
     // Second report with similar symptom
-    const secondCase = caseRepo.create({
+    const secondCase = await caseRepo.create({
       case_id: 'case_outage_2',
       guild_id: guildId,
       channel_id: 'chan_1',
@@ -76,18 +78,18 @@ describe('Shared Incident Detection Engine', () => {
       status: 'new',
     });
 
-    const result = detector.detectCluster(secondCase);
+    const result = await detector.detectCluster(secondCase);
     expect(result.clusterFound).toBe(true);
     expect(result.isNewIncident).toBe(true);
     expect(result.incident).toBeDefined();
     expect(result.incident?.verification_state).toBe('suspected');
 
     // Confirm incident by admin
-    const confirmed = detector.confirmIncident(result.incident!.incident_id, 'admin_dave', 'Backend sync queue backlog');
+    const confirmed = await detector.confirmIncident(result.incident!.incident_id, 'admin_dave', 'Backend sync queue backlog');
     expect(confirmed?.verification_state).toBe('confirmed');
 
     // Third report arrives
-    const thirdCase = caseRepo.create({
+    const thirdCase = await caseRepo.create({
       case_id: 'case_outage_3',
       guild_id: guildId,
       channel_id: 'chan_1',
@@ -99,7 +101,7 @@ describe('Shared Incident Detection Engine', () => {
       status: 'new',
     });
 
-    const result3 = detector.detectCluster(thirdCase);
+    const result3 = await detector.detectCluster(thirdCase);
     expect(result3.clusterFound).toBe(true);
     expect(result3.isNewIncident).toBe(false);
     expect(result3.incident?.incident_id).toBe(result.incident!.incident_id);

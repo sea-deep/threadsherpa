@@ -35,7 +35,7 @@ export class BotInteractionRouter {
     private incidentDetector: IncidentDetector
   ) {}
 
-  private isAuthorizedAdmin(interaction: ChatInputCommandInteraction | ButtonInteraction): boolean {
+  private async isAuthorizedAdmin(interaction: ChatInputCommandInteraction | ButtonInteraction): Promise<boolean> {
     const member = interaction.member as GuildMember | null;
     if (!member) return false;
     if (member.permissions && typeof member.permissions.has === 'function' && member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -45,7 +45,7 @@ export class BotInteractionRouter {
     const roleIds = member.roles?.cache
       ? Array.from(member.roles.cache.values()).map((r: any) => r.id || r)
       : [];
-    return this.guildRepo.isAdmin(interaction.guildId || '', roleIds);
+    return await this.guildRepo.isAdmin(interaction.guildId || '', roleIds);
   }
 
   async handleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -86,7 +86,7 @@ export class BotInteractionRouter {
   }
 
   private async handleSetup(interaction: ChatInputCommandInteraction): Promise<void> {
-    if (!this.isAuthorizedAdmin(interaction)) {
+    if (!(await this.isAuthorizedAdmin(interaction))) {
       await interaction.reply({ content: '❌ You do not have permission to configure ThreadSherpa. Requires Server Administrator or authorized role.', ephemeral: true });
       return;
     }
@@ -99,7 +99,7 @@ export class BotInteractionRouter {
     const repo = interaction.options.getString('repo');
     const autonomyMode = interaction.options.getString('autonomy_mode') as 'observe' | 'supervised' | 'auto' | null;
 
-    const currentConfig = this.guildRepo.get(guildId);
+    const currentConfig = await this.guildRepo.get(guildId);
     const supportChannels = new Set(currentConfig?.support_channel_ids || []);
     const adminRoles = new Set(currentConfig?.admin_role_ids || []);
     const allowedDomains = new Set(currentConfig?.allowed_domains || []);
@@ -111,7 +111,7 @@ export class BotInteractionRouter {
     if (allowedDomain) allowedDomains.add(allowedDomain.toLowerCase().trim());
     if (repo) connectedRepos.add(repo.trim());
 
-    const updated = this.guildRepo.upsert({
+    const updated = await this.guildRepo.upsert({
       guild_id: guildId,
       autonomy_mode: autonomyMode || currentConfig?.autonomy_mode || 'supervised',
       support_channel_ids: Array.from(supportChannels),
@@ -146,7 +146,7 @@ export class BotInteractionRouter {
     await interaction.deferReply();
 
     const caseId = `case_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const newCase = this.caseRepo.create({
+    const newCase = await this.caseRepo.create({
       case_id: caseId,
       guild_id: guildId,
       channel_id: interaction.channelId,
@@ -160,12 +160,12 @@ export class BotInteractionRouter {
     });
 
     // Check for potential shared incident
-    const clusterResult = this.incidentDetector.detectCluster(newCase);
+    const clusterResult = await this.incidentDetector.detectCluster(newCase);
 
     // Run investigation
-    const invResult = await this.orchestrator.investigateCase(caseId);
-    const updatedCase = this.caseRepo.get(caseId)!;
-    const evidence = this.evidenceRepo.getByCaseId(caseId);
+    await this.orchestrator.investigateCase(caseId);
+    const updatedCase = (await this.caseRepo.get(caseId))!;
+    const evidence = await this.evidenceRepo.getByCaseId(caseId);
 
     const embed = buildCaseEmbed(updatedCase, evidence);
     await interaction.editReply({ embeds: [embed] });
@@ -186,14 +186,15 @@ export class BotInteractionRouter {
     const parentId = isThread ? interaction.channel.parentId : null;
     const threadId = isThread ? interaction.channelId : undefined;
 
-    const caseId = caseIdOption || this.caseRepo.findActiveCase(parentId || interaction.channelId, threadId)?.case_id;
+    const activeFound = await this.caseRepo.findActiveCase(parentId || interaction.channelId, threadId);
+    const caseId = caseIdOption || activeFound?.case_id;
 
     if (!caseId) {
       await interaction.reply({ content: 'No active support case found in this channel or thread. Specify a `case_id`.', ephemeral: true });
       return;
     }
 
-    let c = this.caseRepo.get(caseId);
+    let c = await this.caseRepo.get(caseId);
     if (!c || c.guild_id !== interaction.guildId) {
       await interaction.reply({ content: `Case \`${caseId}\` not found.`, ephemeral: true });
       return;
@@ -204,9 +205,9 @@ export class BotInteractionRouter {
       const author = interaction.user.username;
       const note = `[Context Update from @${author}]: ${updateContext.trim()}`;
       const updatedSummary = `${c.summary || c.title}\n\n${note}`.slice(0, 3000);
-      c = this.caseRepo.updateSummary(caseId, updatedSummary)!;
+      c = (await this.caseRepo.updateSummary(caseId, updatedSummary))!;
 
-      this.evidenceRepo.add({
+      await this.evidenceRepo.add({
         evidence_id: `ev_ctx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         case_id: caseId,
         source_type: 'discord_message',
@@ -220,16 +221,16 @@ export class BotInteractionRouter {
 
     // 2. Perform requested action
     if (action === 'resolve') {
-      c = this.caseRepo.updateStatus(caseId, 'resolved', 'Marked resolved via /case')!;
+      c = (await this.caseRepo.updateStatus(caseId, 'resolved', 'Marked resolved via /case'))!;
     } else if (action === 'close') {
-      c = this.caseRepo.updateStatus(caseId, 'closed', 'Closed via /case')!;
+      c = (await this.caseRepo.updateStatus(caseId, 'closed', 'Closed via /case'))!;
     } else if (action === 'reinvestigate') {
       if (typeof interaction.deferReply === 'function') {
         await interaction.deferReply();
       }
       await this.orchestrator.investigateCase(caseId);
-      c = this.caseRepo.get(caseId)!;
-      const evidence = this.evidenceRepo.getByCaseId(caseId);
+      c = (await this.caseRepo.get(caseId))!;
+      const evidence = await this.evidenceRepo.getByCaseId(caseId);
       const embed = buildCaseEmbed(c, evidence);
       if (typeof interaction.editReply === 'function') {
         await interaction.editReply({
@@ -240,7 +241,7 @@ export class BotInteractionRouter {
       return;
     }
 
-    const evidence = this.evidenceRepo.getByCaseId(caseId);
+    const evidence = await this.evidenceRepo.getByCaseId(caseId);
     const embed = buildCaseEmbed(c, evidence);
     await interaction.reply({
       content: updateContext ? '📝 **Case Context Successfully Updated**' : undefined,
@@ -249,14 +250,13 @@ export class BotInteractionRouter {
   }
 
   private async handleTeach(interaction: ChatInputCommandInteraction): Promise<void> {
-    if (!this.isAuthorizedAdmin(interaction)) {
+    if (!(await this.isAuthorizedAdmin(interaction))) {
       await interaction.reply({ content: '❌ You must be an authorized support administrator to teach ThreadSherpa.', ephemeral: true });
       return;
     }
 
     const question = interaction.options.getString('question', true);
     const solution = interaction.options.getString('solution', true);
-    const appliesWhen = interaction.options.getString('applies_when');
 
     await interaction.deferReply({ ephemeral: true });
 
@@ -283,7 +283,7 @@ export class BotInteractionRouter {
     if (subcommand === 'search') {
       const query = interaction.options.getString('query', true);
       await interaction.deferReply();
-      const results = this.knowledgeRepo.searchLexical(guildId, query, 5);
+      const results = await this.knowledgeRepo.searchLexical(guildId, query, 5);
 
       if (results.length === 0) {
         await interaction.editReply({ content: `No approved knowledge found matching "${query}".` });
@@ -293,7 +293,7 @@ export class BotInteractionRouter {
       const list = results.map((item, idx) => `**${idx + 1}. [v${item.current_version}] ${item.question_patterns[0]}**\n> ${item.canonical_answer.slice(0, 200)}...\n*ID: \`${item.knowledge_id}\`*`).join('\n\n');
       await interaction.editReply({ content: `### 🧠 Memory Search Results for "${query}"\n\n${list}` });
     } else if (subcommand === 'list') {
-      const items = this.knowledgeRepo.getApproved(guildId);
+      const items = await this.knowledgeRepo.getApproved(guildId);
       if (items.length === 0) {
         await interaction.reply({ content: 'No approved knowledge items stored yet. Teach the bot with `/teach` or resolve cases!', ephemeral: true });
         return;
@@ -302,7 +302,7 @@ export class BotInteractionRouter {
       const list = items.slice(0, 8).map(item => `• **${item.question_patterns[0]}** (v${item.current_version})\n  *Answer*: ${item.canonical_answer.slice(0, 100)}... (\`${item.knowledge_id}\`)`).join('\n');
       await interaction.reply({ content: `### 📚 Approved Knowledge Items (${items.length} total)\n\n${list}`, ephemeral: true });
     } else if (subcommand === 'pending') {
-      const pending = this.knowledgeRepo.getPendingCandidates(guildId);
+      const pending = await this.knowledgeRepo.getPendingCandidates(guildId);
       if (pending.length === 0) {
         await interaction.reply({ content: 'No pending knowledge candidates awaiting review.', ephemeral: true });
         return;
@@ -311,12 +311,12 @@ export class BotInteractionRouter {
       const list = pending.map(p => `• **${p.knowledge_id}**: "${p.question_patterns[0]}"\n  *Proposed Answer*: ${p.canonical_answer.slice(0, 100)}...`).join('\n');
       await interaction.reply({ content: `### ⏳ Pending Knowledge Candidates (${pending.length})\n\n${list}`, ephemeral: true });
     } else if (subcommand === 'delete') {
-      if (!this.isAuthorizedAdmin(interaction)) {
+      if (!(await this.isAuthorizedAdmin(interaction))) {
         await interaction.reply({ content: '❌ Only administrators can delete knowledge items.', ephemeral: true });
         return;
       }
       const knowledgeId = interaction.options.getString('knowledge_id', true);
-      const deleted = this.knowledgeRepo.delete(knowledgeId);
+      const deleted = await this.knowledgeRepo.delete(knowledgeId);
       if (deleted) {
         await interaction.reply({ content: `✅ Knowledge item \`${knowledgeId}\` has been marked deleted and purged from active search indexes.`, ephemeral: true });
       } else {
@@ -327,7 +327,8 @@ export class BotInteractionRouter {
 
   private async handleIssue(interaction: ChatInputCommandInteraction): Promise<void> {
     const caseIdOption = interaction.options.getString('case_id');
-    const caseId = caseIdOption || this.caseRepo.findActiveCase(interaction.channelId)?.case_id;
+    const activeCase = await this.caseRepo.findActiveCase(interaction.channelId);
+    const caseId = caseIdOption || activeCase?.case_id;
 
     if (!caseId) {
       await interaction.reply({ content: 'No active support case found in this channel. Specify a `case_id`.', ephemeral: true });
@@ -347,7 +348,7 @@ export class BotInteractionRouter {
   }
 
   private async handleSources(interaction: ChatInputCommandInteraction): Promise<void> {
-    const config = this.guildRepo.get(interaction.guildId!);
+    const config = await this.guildRepo.get(interaction.guildId!);
     const domains = config?.allowed_domains || [];
     const repos = config?.connected_repos || [];
 
@@ -365,11 +366,11 @@ export class BotInteractionRouter {
     logger.info({ action, targetId, user: interaction.user.tag }, 'Received button interaction');
 
     if (action === 'approve_know') {
-      if (!this.isAuthorizedAdmin(interaction)) {
+      if (!(await this.isAuthorizedAdmin(interaction))) {
         await interaction.reply({ content: '❌ Only authorized support administrators can approve knowledge.', ephemeral: true });
         return;
       }
-      const approved = this.learningPipeline.approveCandidate(targetId, interaction.user.id);
+      const approved = await this.learningPipeline.approveCandidate(targetId, interaction.user.id);
       if (approved) {
         await interaction.update({
           content: `✅ **Knowledge Approved & Indexed** by <@${interaction.user.id}>. This resolution is now part of ThreadSherpa's persistent memory and will be applied to future inquiries.`,
@@ -377,17 +378,17 @@ export class BotInteractionRouter {
         });
       }
     } else if (action === 'reject_know') {
-      if (!this.isAuthorizedAdmin(interaction)) {
+      if (!(await this.isAuthorizedAdmin(interaction))) {
         await interaction.reply({ content: '❌ Only authorized administrators can reject knowledge candidates.', ephemeral: true });
         return;
       }
-      this.learningPipeline.rejectCandidate(targetId, interaction.user.id);
+      await this.learningPipeline.rejectCandidate(targetId, interaction.user.id);
       await interaction.update({
         content: `❌ **Knowledge Candidate Rejected** by <@${interaction.user.id}>. Candidate will not be used in retrieval.`,
         components: [],
       });
     } else if (action === 'publish_gh') {
-      if (!this.isAuthorizedAdmin(interaction)) {
+      if (!(await this.isAuthorizedAdmin(interaction))) {
         await interaction.reply({ content: '❌ Only authorized administrators can publish GitHub issues.', ephemeral: true });
         return;
       }
@@ -403,21 +404,21 @@ export class BotInteractionRouter {
         await interaction.followUp({ content: `❌ Failed to publish GitHub issue: ${msg}`, ephemeral: true });
       }
     } else if (action === 'confirm_inc') {
-      if (!this.isAuthorizedAdmin(interaction)) {
+      if (!(await this.isAuthorizedAdmin(interaction))) {
         await interaction.reply({ content: '❌ Only administrators can confirm incidents.', ephemeral: true });
         return;
       }
-      this.incidentDetector.confirmIncident(targetId, interaction.user.id);
+      await this.incidentDetector.confirmIncident(targetId, interaction.user.id);
       await interaction.update({
         content: `🚨 **Incident Confirmed** by <@${interaction.user.id}>. Further similar reports will be grouped under this incident.`,
         components: [],
       });
     } else if (action === 'resolve_inc') {
-      if (!this.isAuthorizedAdmin(interaction)) {
+      if (!(await this.isAuthorizedAdmin(interaction))) {
         await interaction.reply({ content: '❌ Only administrators can resolve incidents.', ephemeral: true });
         return;
       }
-      this.incidentDetector.resolveIncident(targetId, interaction.user.id);
+      await this.incidentDetector.resolveIncident(targetId, interaction.user.id);
       await interaction.update({
         content: `✅ **Incident Marked Resolved** by <@${interaction.user.id}>.`,
         components: [],
@@ -430,14 +431,15 @@ export class BotInteractionRouter {
 
     // 1. One-time setup & support channel check:
     // Only monitor if this thread or its parent (Forum or Text channel) is in support_channel_ids
-    if (!this.guildRepo.isSupportChannel(thread.guildId, thread.id, thread.parentId)) {
+    const isSupport = await this.guildRepo.isSupportChannel(thread.guildId, thread.id, thread.parentId);
+    if (!isSupport) {
       return;
     }
 
     logger.info({ threadId: thread.id, parentId: thread.parentId, name: thread.name }, 'New support thread/forum post detected');
 
     // 2. Avoid duplicate cases if already registered
-    const existingCase = this.caseRepo.getByThreadId(thread.id);
+    const existingCase = await this.caseRepo.getByThreadId(thread.id);
     if (existingCase) return;
 
     // 3. In Forum channels or text threads, fetch starter message if available
@@ -454,7 +456,7 @@ export class BotInteractionRouter {
 
     // 4. Create support case
     const caseId = `case_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const newCase = this.caseRepo.create({
+    const newCase = await this.caseRepo.create({
       case_id: caseId,
       guild_id: thread.guildId,
       channel_id: thread.parentId || thread.id,
@@ -469,10 +471,10 @@ export class BotInteractionRouter {
     });
 
     // 5. Check incident clustering
-    this.incidentDetector.detectCluster(newCase);
+    await this.incidentDetector.detectCluster(newCase);
 
     // 6. Check autonomy mode
-    const config = this.guildRepo.get(thread.guildId);
+    const config = await this.guildRepo.get(thread.guildId);
     if (config?.autonomy_mode === 'observe') {
       logger.info({ caseId, threadId: thread.id }, 'Observe mode active; skipping automated response in new thread');
       return;
@@ -480,8 +482,8 @@ export class BotInteractionRouter {
 
     // 7. Investigate and post response directly into the thread/forum post
     await this.orchestrator.investigateCase(caseId);
-    const updated = this.caseRepo.get(caseId)!;
-    const evidence = this.evidenceRepo.getByCaseId(caseId);
+    const updated = (await this.caseRepo.get(caseId))!;
+    const evidence = await this.evidenceRepo.getByCaseId(caseId);
     const embed = buildCaseEmbed(updated, evidence);
 
     await Promise.resolve(thread.send({ embeds: [embed] })).catch(err => {
@@ -498,7 +500,8 @@ export class BotInteractionRouter {
     const isThread = Boolean(message.channel && typeof message.channel.isThread === 'function' && message.channel.isThread());
     const parentId = isThread && message.channel && 'parentId' in message.channel ? (message.channel.parentId as string | null) : null;
 
-    if (!this.guildRepo.isSupportChannel(message.guildId, message.channelId, parentId)) {
+    const isSupport = await this.guildRepo.isSupportChannel(message.guildId, message.channelId, parentId);
+    if (!isSupport) {
       return;
     }
 
@@ -508,11 +511,11 @@ export class BotInteractionRouter {
     const roleIds = member?.roles?.cache
       ? Array.from(member.roles.cache.values()).map((r: any) => r.id || r)
       : [];
-    const isAdmin = (member?.permissions && typeof member.permissions.has === 'function' && member.permissions.has(PermissionFlagsBits.Administrator)) || this.guildRepo.isAdmin(message.guildId, roleIds);
+    const isAdmin = (member?.permissions && typeof member.permissions.has === 'function' && member.permissions.has(PermissionFlagsBits.Administrator)) || (await this.guildRepo.isAdmin(message.guildId, roleIds));
 
     // 3. Resolve active case (in thread or channel)
     const threadId = isThread ? message.channelId : (message.thread?.id || undefined);
-    const activeCase = this.caseRepo.findActiveCase(parentId || message.channelId, threadId);
+    const activeCase = await this.caseRepo.findActiveCase(parentId || message.channelId, threadId);
 
     // 4. Admin learning trigger: If admin replies in an active case, extract knowledge candidate!
     if (isAdmin && activeCase && activeCase.requester_id !== message.author.id && message.content.length > 20) {
@@ -547,9 +550,9 @@ export class BotInteractionRouter {
       const authorTag = message.author.username;
       const note = `[Update from @${authorTag}]: ${message.content}`;
       const newSummary = `${activeCase.summary || activeCase.title}\n\n${note}`.slice(0, 3000);
-      this.caseRepo.updateSummary(activeCase.case_id, newSummary);
+      await this.caseRepo.updateSummary(activeCase.case_id, newSummary);
 
-      this.evidenceRepo.add({
+      await this.evidenceRepo.add({
         evidence_id: `ev_ctx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         case_id: activeCase.case_id,
         source_type: 'discord_message',
@@ -564,14 +567,14 @@ export class BotInteractionRouter {
       await message.react('📝').catch(() => {});
 
       // If the case was awaiting user input or the user asks a follow-up, re-investigate
-      const config = this.guildRepo.get(message.guildId);
+      const config = await this.guildRepo.get(message.guildId);
       const isAutoOrSupervised = config?.autonomy_mode === 'auto' || config?.autonomy_mode === 'supervised';
       const needsResponse = activeCase.status === 'awaiting_user' || activeCase.status === 'triaging' || message.content.includes('?');
 
       if (isAutoOrSupervised && needsResponse) {
         await this.orchestrator.investigateCase(activeCase.case_id);
-        const updated = this.caseRepo.get(activeCase.case_id)!;
-        const evidence = this.evidenceRepo.getByCaseId(activeCase.case_id);
+        const updated = (await this.caseRepo.get(activeCase.case_id))!;
+        const evidence = await this.evidenceRepo.getByCaseId(activeCase.case_id);
         const embed = buildCaseEmbed(updated, evidence);
         await message.reply({ embeds: [embed] });
       }
@@ -580,7 +583,7 @@ export class BotInteractionRouter {
     }
 
     // 6. User new question in support channel: auto-triage if autonomy mode permits
-    const config = this.guildRepo.get(message.guildId);
+    const config = await this.guildRepo.get(message.guildId);
     if (config?.autonomy_mode === 'observe') {
       return; // Do not send unsolicited answer in observe mode
     }
@@ -604,7 +607,7 @@ export class BotInteractionRouter {
 
       // Create new case
       const caseId = `case_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const newCase = this.caseRepo.create({
+      const newCase = await this.caseRepo.create({
         case_id: caseId,
         guild_id: message.guildId,
         channel_id: parentId || message.channelId,
@@ -619,12 +622,12 @@ export class BotInteractionRouter {
       });
 
       // Cluster check
-      this.incidentDetector.detectCluster(newCase);
+      await this.incidentDetector.detectCluster(newCase);
 
       // Investigate
       await this.orchestrator.investigateCase(caseId);
-      const updated = this.caseRepo.get(caseId)!;
-      const evidence = this.evidenceRepo.getByCaseId(caseId);
+      const updated = (await this.caseRepo.get(caseId))!;
+      const evidence = await this.evidenceRepo.getByCaseId(caseId);
 
       const embed = buildCaseEmbed(updated, evidence);
       if (targetThreadId && !isThread && replyTarget !== (message as unknown)) {

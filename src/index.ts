@@ -1,11 +1,7 @@
 import { getConfig } from './config/env.js';
 import { getLogger } from './utils/logger.js';
 import { initSentry } from './utils/sentry.js';
-import { createDatabase, closeDatabase } from './database/connection.js';
-import { runMigrations } from './database/migrator.js';
-import { connectMongo, closeMongo } from './database/mongo/connection.js';
-import { MongoKnowledgeRepository } from './database/mongo/knowledge.mongo.js';
-import { MongoCaseRepository } from './database/mongo/case.mongo.js';
+import { connectDatabase, closeDatabase } from './database/connection.js';
 import { GuildConfigRepository } from './database/repositories/guild-config.repo.js';
 import { CaseRepository } from './database/repositories/case.repo.js';
 import { EvidenceRepository } from './database/repositories/evidence.repo.js';
@@ -13,7 +9,6 @@ import { KnowledgeRepository } from './database/repositories/knowledge.repo.js';
 import { IncidentRepository } from './database/repositories/incident.repo.js';
 import { GitHubRepository } from './database/repositories/github.repo.js';
 import { AuditRepository } from './database/repositories/audit.repo.js';
-import { OllamaProvider } from './integrations/model/ollama.provider.js';
 import { createModelProvider } from './integrations/model/factory.js';
 import { SafeFetcher } from './integrations/web/safe-fetcher.js';
 import { GitHubClient } from './integrations/github/github.client.js';
@@ -26,6 +21,7 @@ import { GitHubCopilot } from './agent/github-copilot.js';
 import { IncidentDetector } from './agent/incident-detector.js';
 import { BotInteractionRouter } from './bot/handlers/router.js';
 import { createBotClient } from './bot/client.js';
+import type { Db } from 'mongodb';
 
 const logger = getLogger();
 
@@ -41,27 +37,22 @@ export async function bootstrap() {
     initSentry(config.SENTRY_DSN);
   }
 
-  // 2. Initialize Database (Dual: SQLite / MongoDB Atlas)
-  let mongoDbInstance = null;
-  if (config.DATABASE_PROVIDER === 'mongodb' || config.MONGODB_URI) {
-    try {
-      const { db: mDb } = await connectMongo({
-        uri: config.MONGODB_URI,
-        dbName: config.MONGODB_DB_NAME,
-      });
-      mongoDbInstance = mDb;
-      logger.info({ provider: 'MongoDB Atlas', db: config.MONGODB_DB_NAME }, 'Using MongoDB Atlas database backend');
-    } catch (mongoErr) {
-      logger.warn({ mongoErr }, 'Could not connect to MongoDB Atlas; falling back to local SQLite engine');
-    }
+  // 2. Initialize Unified Database (MongoDB Atlas / local / in-memory fallback)
+  let db: Db;
+  try {
+    const conn = await connectDatabase({
+      uri: config.MONGODB_URI,
+      dbName: config.MONGODB_DB_NAME,
+    });
+    db = conn.db;
+    logger.info({ provider: 'MongoDB Atlas', db: config.MONGODB_DB_NAME }, 'MongoDB database connected and verified');
+  } catch (mongoErr) {
+    logger.warn({ mongoErr }, 'Could not connect to external MongoDB; falling back to in-memory MongoDB store');
+    const conn = await connectDatabase({ inMemory: true });
+    db = conn.db;
   }
 
-  // Always initialize SQLite engine for reliable local storage, FTS5, and fallback
-  const db = createDatabase({ path: config.DATABASE_PATH });
-  const migrationsApplied = runMigrations(db);
-  logger.info({ migrationsApplied, path: config.DATABASE_PATH }, 'SQLite database engine verified');
-
-  // 3. Initialize Repositories
+  // 3. Initialize Repositories (Unified MongoDB)
   const guildRepo = new GuildConfigRepository(db);
   const caseRepo = new CaseRepository(db);
   const evidenceRepo = new EvidenceRepository(db);
@@ -70,15 +61,7 @@ export async function bootstrap() {
   const githubRepo = new GitHubRepository(db);
   const auditRepo = new AuditRepository(db);
 
-  // If MongoDB is connected, initialize Mongo repositories for dual persistence and Atlas Vector Search
-  let mongoKnowledgeRepo: MongoKnowledgeRepository | null = null;
-  let mongoCaseRepo: MongoCaseRepository | null = null;
-  if (mongoDbInstance) {
-    mongoKnowledgeRepo = new MongoKnowledgeRepository(mongoDbInstance);
-    mongoCaseRepo = new MongoCaseRepository(mongoDbInstance);
-  }
-
-  // 4. Initialize Model Provider (Local Ollama / Google Gemini / Groq / OpenAI)
+  // 4. Initialize Model Provider (Paper Instruments / Ollama / Gemini / Groq / OpenAI)
   const modelProvider = createModelProvider(config);
 
   const modelHealth = await modelProvider.healthCheck();
@@ -108,7 +91,6 @@ export async function bootstrap() {
   const toolRegistry = new ToolRegistry(memoryRetriever, safeFetcher, githubClient, caseRepo, evidenceRepo, serpApiClient);
 
   const orchestrator = new AgentOrchestrator(
-    db,
     caseRepo,
     evidenceRepo,
     guildRepo,
@@ -167,8 +149,7 @@ export async function bootstrap() {
     if (discordClient) {
       discordClient.destroy();
     }
-    closeDatabase();
-    await closeMongo();
+    await closeDatabase();
     process.exit(0);
   };
 
@@ -177,11 +158,9 @@ export async function bootstrap() {
 
   return {
     db,
-    mongoDbInstance,
-    mongoKnowledgeRepo,
-    mongoCaseRepo,
     guildRepo,
     caseRepo,
+    evidenceRepo,
     knowledgeRepo,
     incidentRepo,
     githubRepo,

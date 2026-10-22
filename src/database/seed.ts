@@ -1,10 +1,9 @@
 /**
  * Synthetic Demo Data Seeder for ThreadSherpa
- * Populates a local development or demo environment with realistic, synthetic support scenarios.
+ * Populates a local development or demo environment with realistic, synthetic support scenarios in MongoDB.
  */
 
-import { createDatabase, closeDatabase } from './connection.js';
-import { runMigrations } from './migrator.js';
+import { connectDatabase, closeDatabase } from './connection.js';
 import { GuildConfigRepository } from './repositories/guild-config.repo.js';
 import { CaseRepository } from './repositories/case.repo.js';
 import { EvidenceRepository } from './repositories/evidence.repo.js';
@@ -14,11 +13,10 @@ import { GitHubRepository } from './repositories/github.repo.js';
 import { AuditRepository } from './repositories/audit.repo.js';
 import { logger } from '../utils/logger.js';
 
-export function seedDemoData(dbPath?: string) {
-  logger.info({ dbPath: dbPath || 'default' }, 'Seeding synthetic ThreadSherpa demo dataset...');
+export async function seedDemoData(uri?: string) {
+  logger.info({ uri: uri || 'default' }, 'Seeding synthetic ThreadSherpa demo dataset into MongoDB...');
 
-  const db = createDatabase({ path: dbPath });
-  runMigrations(db);
+  const { db } = await connectDatabase({ uri });
 
   const guildRepo = new GuildConfigRepository(db);
   const caseRepo = new CaseRepository(db);
@@ -33,7 +31,7 @@ export function seedDemoData(dbPath?: string) {
   const adminRoleId = '998877665544332211';
 
   // 1. Guild Configuration
-  guildRepo.upsert({
+  await guildRepo.upsert({
     guild_id: demoGuildId,
     autonomy_mode: 'supervised',
     support_channel_ids: [supportChannelId],
@@ -45,7 +43,7 @@ export function seedDemoData(dbPath?: string) {
   });
 
   // 2. Approved Knowledge: Node 26 SQLite Built-in
-  const approvedItem1 = knowledgeRepo.createCandidate({
+  const approvedItem1 = await knowledgeRepo.createCandidate({
     knowledge_id: 'know_demo_node26_sqlite',
     guild_id: demoGuildId,
     question_patterns: [
@@ -61,10 +59,10 @@ export function seedDemoData(dbPath?: string) {
     embedding: [0.88, 0.12, 0.05, 0.3],
     created_by: 'admin_lead',
   });
-  knowledgeRepo.approve(approvedItem1.knowledge_id, 'admin_lead', 'Verified on Node 26');
+  await knowledgeRepo.approve(approvedItem1.knowledge_id, 'admin_lead', 'Verified on Node 26');
 
   // 3. Approved Knowledge: Hackathon Points Sync
-  const approvedItem2 = knowledgeRepo.createCandidate({
+  const approvedItem2 = await knowledgeRepo.createCandidate({
     knowledge_id: 'know_demo_points_sync',
     guild_id: demoGuildId,
     question_patterns: [
@@ -78,10 +76,10 @@ export function seedDemoData(dbPath?: string) {
     embedding: [0.1, 0.85, 0.2, 0.0],
     created_by: 'admin_lead',
   });
-  knowledgeRepo.approve(approvedItem2.knowledge_id, 'admin_lead');
+  await knowledgeRepo.approve(approvedItem2.knowledge_id, 'admin_lead');
 
   // 4. Pending Candidate Awaiting Admin Review
-  knowledgeRepo.createCandidate({
+  await knowledgeRepo.createCandidate({
     knowledge_id: 'know_demo_pending_cors',
     guild_id: demoGuildId,
     question_patterns: ['How to allow CORS in Discord bot webhooks'],
@@ -92,7 +90,7 @@ export function seedDemoData(dbPath?: string) {
   });
 
   // 5. Rejected Candidate (Proves rejected advice is blocked from retrieval)
-  const rejected = knowledgeRepo.createCandidate({
+  const rejected = await knowledgeRepo.createCandidate({
     knowledge_id: 'know_demo_rejected_insecure',
     guild_id: demoGuildId,
     question_patterns: ['How to skip all discord authentication checks'],
@@ -100,10 +98,10 @@ export function seedDemoData(dbPath?: string) {
     authority: 'community_lead',
     created_by: 'untrusted_user',
   });
-  knowledgeRepo.reject(rejected.knowledge_id, 'admin_lead', 'High security risk: leaks credentials');
+  await knowledgeRepo.reject(rejected.knowledge_id, 'admin_lead', 'High security risk: leaks credentials');
 
   // 6. Conflicting Knowledge Scenario (Flagged for Review)
-  knowledgeRepo.createCandidate({
+  await knowledgeRepo.createCandidate({
     knowledge_id: 'know_demo_conflict_auth1',
     guild_id: demoGuildId,
     question_patterns: ['Default session token timeout duration'],
@@ -111,10 +109,10 @@ export function seedDemoData(dbPath?: string) {
     authority: 'approved_admin',
     created_by: 'admin_alice',
   });
-  knowledgeRepo.approve('know_demo_conflict_auth1', 'admin_alice');
+  await knowledgeRepo.approve('know_demo_conflict_auth1', 'admin_alice');
 
   // 7. Synthetic Support Cases
-  const resolvedCase = caseRepo.create({
+  const resolvedCase = await caseRepo.create({
     case_id: 'case_demo_resolved_01',
     guild_id: demoGuildId,
     channel_id: supportChannelId,
@@ -129,7 +127,7 @@ export function seedDemoData(dbPath?: string) {
     resolution_outcome: 'User confirmed solution resolved build',
   });
 
-  evidenceRepo.add({
+  await evidenceRepo.add({
     evidence_id: 'ev_demo_1',
     case_id: resolvedCase.case_id,
     source_type: 'documentation',
@@ -141,7 +139,7 @@ export function seedDemoData(dbPath?: string) {
   });
 
   // 8. Shared Incident (Symptom Clustering)
-  const incCase1 = caseRepo.create({
+  const incCase1 = await caseRepo.create({
     case_id: 'case_demo_cluster_1',
     guild_id: demoGuildId,
     channel_id: supportChannelId,
@@ -154,7 +152,7 @@ export function seedDemoData(dbPath?: string) {
     summary: 'HTTP 503 received when verifying project submission points',
   });
 
-  const incCase2 = caseRepo.create({
+  const incCase2 = await caseRepo.create({
     case_id: 'case_demo_cluster_2',
     guild_id: demoGuildId,
     channel_id: supportChannelId,
@@ -167,7 +165,7 @@ export function seedDemoData(dbPath?: string) {
     summary: 'Multiple participants seeing 503 error on points webhook',
   });
 
-  const incident = incidentRepo.create({
+  const incident = await incidentRepo.create({
     incident_id: 'inc_demo_points_503',
     guild_id: demoGuildId,
     title: 'DEV Challenge Points Webhook Degradation (HTTP 503)',
@@ -176,11 +174,11 @@ export function seedDemoData(dbPath?: string) {
     suspected_cause: 'Webhook queuing backlog under high hackathon submission volume',
   });
 
-  incidentRepo.linkCase(incident.incident_id, incCase1.case_id);
-  incidentRepo.linkCase(incident.incident_id, incCase2.case_id);
+  await incidentRepo.linkCase(incident.incident_id, incCase1.case_id);
+  await incidentRepo.linkCase(incident.incident_id, incCase2.case_id);
 
   // 9. GitHub Issue Draft Ready for Admin Creation
-  githubRepo.createDraft({
+  await githubRepo.createDraft({
     link_id: 'gh_draft_demo_01',
     case_id: resolvedCase.case_id,
     repo_owner: 'sea-deep',
@@ -191,7 +189,7 @@ export function seedDemoData(dbPath?: string) {
   });
 
   // 10. Audit Events
-  auditRepo.log({
+  await auditRepo.log({
     guild_id: demoGuildId,
     actor_id: 'admin_lead',
     action: 'guild_initialized',
@@ -200,10 +198,9 @@ export function seedDemoData(dbPath?: string) {
     metadata: { demo: true },
   });
 
-  logger.info('Synthetic demo seed completed successfully! Database is ready for exploration.');
+  logger.info('Synthetic demo seed completed successfully! MongoDB is ready for exploration.');
 }
 
 if (process.argv[1] && process.argv[1].endsWith('seed.ts')) {
-  seedDemoData();
-  closeDatabase();
+  seedDemoData().then(() => closeDatabase());
 }

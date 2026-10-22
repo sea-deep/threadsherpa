@@ -1,17 +1,21 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { Db } from 'mongodb';
 import { AuditEvent } from '../../domain/audit.js';
 
 export class AuditRepository {
-  constructor(private db: DatabaseSync) {}
+  constructor(private db: Db) {}
 
-  log(event: {
+  private get collection() {
+    return this.db.collection('audit_events');
+  }
+
+  async log(event: {
     guild_id: string;
     actor_id: string;
     action: string;
     target_type: string;
     target_id: string;
     metadata?: Record<string, unknown>;
-  }): AuditEvent {
+  }): Promise<AuditEvent> {
     const event_id = `aud_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const created_at = new Date().toISOString();
 
@@ -26,40 +30,25 @@ export class AuditRepository {
       created_at,
     };
 
-    this.db.prepare(`
-      INSERT INTO audit_events (
-        event_id, guild_id, actor_id, action, target_type, target_id, metadata, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      auditEvent.event_id,
-      auditEvent.guild_id,
-      auditEvent.actor_id,
-      auditEvent.action,
-      auditEvent.target_type,
-      auditEvent.target_id,
-      JSON.stringify(auditEvent.metadata),
-      auditEvent.created_at
-    );
-
+    await this.collection.insertOne({ ...auditEvent });
     return auditEvent;
   }
 
-  getByGuild(guildId: string, limit: number = 50): AuditEvent[] {
-    const rows = this.db.prepare(`
-      SELECT * FROM audit_events
-      WHERE guild_id = ?
-      ORDER BY created_at DESC
-      LIMIT ?
-    `).all(guildId, limit) as Array<Record<string, unknown>>;
+  async getByGuild(guildId: string, limit: number = 50): Promise<AuditEvent[]> {
+    const docs = await this.collection
+      .find({ guild_id: guildId })
+      .sort({ created_at: -1 })
+      .limit(limit)
+      .toArray();
 
-    return rows.map(r => ({
+    return docs.map((r: Record<string, unknown>) => ({
       event_id: String(r.event_id),
       guild_id: String(r.guild_id),
       actor_id: String(r.actor_id),
       action: String(r.action),
       target_type: String(r.target_type),
       target_id: String(r.target_id),
-      metadata: JSON.parse((r.metadata as string) || '{}'),
+      metadata: (r.metadata && typeof r.metadata === 'object') ? r.metadata as Record<string, unknown> : {},
       created_at: String(r.created_at),
     }));
   }

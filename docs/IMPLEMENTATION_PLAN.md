@@ -7,7 +7,7 @@
   - GitLab: `https://gitlab.com/wdipak/threadsherpa.git`
 - **Host Environment**: macOS (Darwin arm64)
   - Node.js `v26.12.0`, npm `11.20.0`
-  - SQLite3 built-in via Node.js native `node:sqlite` (`DatabaseSync`) with WAL mode, FTS5 full-text virtual tables, and custom `cosine_similarity` scalar function
+  - MongoDB Atlas unified database layer (`mongodb` package) with Atlas Vector Search, text indexes, and zero-dependency in-memory store for local testing
   - Local Ollama running at `http://localhost:11434` with `gemma4:e4b-it-qat` (7.5B Q4_0, context 131k, tool-capable) and `embeddinggemma-2:270m` (768-dim embeddings)
   - GitHub CLI (`gh`) and GitLab CLI (`glab`) configured and authenticated
 - **Obsolete Product Functionality**: None. Starting from clean slate; zero legacy artifacts or dead dependencies.
@@ -19,7 +19,7 @@
 ### Core MVP Boundary (P0 - Mandatory)
 1. **Discord Bot Gateway**: Slash commands (`/setup`, `/ask`, `/investigate`, `/case`, `/teach`, `/memory`, `/issue`, `/sources`), support channel monitoring, and interactive UI components (buttons, review cards).
 2. **Persistent Case State Machine**: `new`, `triaging`, `investigating`, `awaiting_user`, `awaiting_admin`, `answered`, `resolved`, `reopened`, `escalated`, `closed`.
-3. **Database & Migrations**: SQLite with WAL mode, FTS5 full-text search, vector cosine similarity embeddings, and explicit schema migrations.
+3. **Database Architecture**: Unified MongoDB Atlas document store with declarative indexing, Atlas Vector Search, text indexes, and in-memory development adapter.
 4. **Local Open-Weight Model Provider**: Ollama adapter supporting `gemma4:e4b-it-qat` and `embeddinggemma-2:270m`, Zod structured output validation, bounded repair, timeouts, and health checks.
 5. **Controlled Evidence Fetching**: SSRF-protected HTTP web fetcher, documentation retriever, and evidence provenance tracking.
 6. **Persistent Memory & Hybrid Retrieval**: Working, episodic, semantic, and procedural memory with lexical (FTS5) + vector (embeddings) search and server isolation.
@@ -46,7 +46,7 @@
 | **Phase 0** | Repo Audit & Architecture Setup | Dual remotes, `ARCHITECTURE.md`, `IMPLEMENTATION_PLAN.md` | **COMPLETED** |
 | **Phase 1** | Working Application Foundation | TypeScript project config, package.json, Zod env validation, structured logger, DB connection & migrations | **COMPLETED** |
 | **Phase 2** | Discord Integration & UX | Discord.js client, slash commands (`/setup`, `/ask`, `/case`, `/teach`, `/memory`, `/issue`, `/sources`), button & modal interaction routing | **COMPLETED** |
-| **Phase 3** | Case State Machine & Data Model | SQLite schema, migrations, repositories for cases, evidence, knowledge, reviews, incidents, and audit logs | **COMPLETED** |
+| **Phase 3** | Case State Machine & Data Model | Unified MongoDB Atlas collections, declarative indexes, repositories for cases, evidence, knowledge, reviews, incidents, and audit logs | **COMPLETED** |
 | **Phase 4** | Open-Weight Model Provider | Ollama client, structured output parser, health check, tool schemas, embedding generator | **COMPLETED** |
 | **Phase 5** | Source Retrieval & Evidence Management | SSRF-safe fetcher, documentation adapter, evidence validation and ranking | **COMPLETED** |
 | **Phase 6** | Persistent Memory & Hybrid Retrieval | Working, episodic, semantic memory, FTS5 lexical search, vector similarity search, versioning | **COMPLETED** |
