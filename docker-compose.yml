@@ -1,0 +1,21 @@
+services:
+  threadsherpa:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: threadsherpa
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - threadsherpa_data:/app/data
+    environment:
+      - NODE_ENV=production
+      - DATABASE_PATH=/app/data/threadsherpa.sqlite
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  threadsherpa_data:
+    driver: local

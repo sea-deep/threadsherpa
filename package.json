@@ -1,0 +1,45 @@
+{
+  "name": "threadsherpa",
+  "version": "1.0.0",
+  "description": "Autonomous Discord support copilot with persistent, human-trained memory",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "typecheck": "tsc --noEmit",
+    "lint": "tsc --noEmit",
+    "seed": "tsx src/database/seed.ts"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "ai",
+    "support",
+    "copilot",
+    "rag",
+    "memory",
+    "ollama",
+    "github"
+  ],
+  "author": "ThreadSherpa Maintainers",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "discord.js": "^14.18.0",
+    "dotenv": "^16.4.7",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.9",
+    "tsx": "^4.19.3",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.8"
+  }
+}

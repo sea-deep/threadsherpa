@@ -1,0 +1,281 @@
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import { createDatabase } from '../../src/database/connection.js';
+import { runMigrations } from '../../src/database/migrator.js';
+import { GuildConfigRepository } from '../../src/database/repositories/guild-config.repo.js';
+import { CaseRepository } from '../../src/database/repositories/case.repo.js';
+import { EvidenceRepository } from '../../src/database/repositories/evidence.repo.js';
+import { KnowledgeRepository } from '../../src/database/repositories/knowledge.repo.js';
+import { IncidentRepository } from '../../src/database/repositories/incident.repo.js';
+import { GitHubRepository } from '../../src/database/repositories/github.repo.js';
+import { AuditRepository } from '../../src/database/repositories/audit.repo.js';
+
+describe('Data Repositories & State Machine', () => {
+  let db: DatabaseSync;
+  let guildRepo: GuildConfigRepository;
+  let caseRepo: CaseRepository;
+  let evidenceRepo: EvidenceRepository;
+  let knowledgeRepo: KnowledgeRepository;
+  let incidentRepo: IncidentRepository;
+  let githubRepo: GitHubRepository;
+  let auditRepo: AuditRepository;
+
+  beforeEach(() => {
+    db = createDatabase({ inMemory: true });
+    runMigrations(db);
+
+    guildRepo = new GuildConfigRepository(db);
+    caseRepo = new CaseRepository(db);
+    evidenceRepo = new EvidenceRepository(db);
+    knowledgeRepo = new KnowledgeRepository(db);
+    incidentRepo = new IncidentRepository(db);
+    githubRepo = new GitHubRepository(db);
+    auditRepo = new AuditRepository(db);
+
+    // Setup test guild
+    guildRepo.upsert({
+      guild_id: 'guild_123',
+      autonomy_mode: 'supervised',
+      admin_role_ids: ['role_admin'],
+      support_channel_ids: ['chan_support'],
+    });
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  describe('GuildConfigRepository', () => {
+    it('retrieves and checks support channel and admin roles', () => {
+      expect(guildRepo.isSupportChannel('guild_123', 'chan_support')).toBe(true);
+      expect(guildRepo.isSupportChannel('guild_123', 'chan_general')).toBe(false);
+      expect(guildRepo.isAdmin('guild_123', ['role_admin'])).toBe(true);
+      expect(guildRepo.isAdmin('guild_123', ['role_user'])).toBe(false);
+    });
+  });
+
+  describe('CaseRepository & State Transitions', () => {
+    it('creates and updates a case with full state transitions', () => {
+      const created = caseRepo.create({
+        case_id: 'case_001',
+        guild_id: 'guild_123',
+        channel_id: 'chan_support',
+        message_id: 'msg_001',
+        requester_id: 'user_1',
+        requester_username: 'alice',
+        category: 'install',
+        title: 'Cannot install dependencies on Node 26',
+        status: 'new',
+        summary: 'Error installing native bindings',
+      });
+
+      expect(created.status).toBe('new');
+
+      // Transition to investigating
+      const investigating = caseRepo.updateStatus('case_001', 'investigating');
+      expect(investigating?.status).toBe('investigating');
+
+      // Transition to answered
+      const answered = caseRepo.updateStatus('case_001', 'answered', 'Provided workaround');
+      expect(answered?.status).toBe('answered');
+
+      // Transition to resolved
+      const resolved = caseRepo.updateStatus('case_001', 'resolved', 'User confirmed fix');
+      expect(resolved?.status).toBe('resolved');
+      expect(resolved?.resolved_at).toBeTruthy();
+
+      // Reopening case
+      const reopened = caseRepo.reopen('case_001', 'Error still happens on Windows');
+      expect(reopened?.status).toBe('reopened');
+      expect(reopened?.reopen_count).toBe(1);
+    });
+
+    it('searches cases via full-text search', () => {
+      caseRepo.create({
+        case_id: 'case_101',
+        guild_id: 'guild_123',
+        channel_id: 'chan_support',
+        message_id: 'msg_101',
+        requester_id: 'user_2',
+        requester_username: 'bob',
+        category: 'auth',
+        title: 'OAuth callback 401 unauthorized',
+        status: 'new',
+        summary: 'Discord oauth token renewal failed',
+      });
+
+      const results = caseRepo.searchSimilarCases('guild_123', 'OAuth token');
+      expect(results.length).toBe(1);
+      expect(results[0].case_id).toBe('case_101');
+    });
+  });
+
+  describe('KnowledgeRepository — Lifecycle, Versioning, and Hybrid Retrieval', () => {
+    it('creates candidate, approves it, and makes it retrievable', () => {
+      const candidate = knowledgeRepo.createCandidate({
+        knowledge_id: 'know_001',
+        guild_id: 'guild_123',
+        question_patterns: ['How do I fix sqlite native build error?', 'node-gyp rebuild failed'],
+        canonical_answer: 'Use node:sqlite built into Node.js 26 instead of native addons.',
+        applies_when: 'Node.js 26+ environment',
+        created_by: 'admin_1',
+        embedding: [0.9, 0.1, 0.0],
+      });
+
+      expect(candidate.approval_status).toBe('candidate');
+
+      // Not retrievable yet because it is only a candidate
+      const beforeApproval = knowledgeRepo.searchLexical('guild_123', 'sqlite build error');
+      expect(beforeApproval.length).toBe(0);
+
+      // Approve candidate
+      const approved = knowledgeRepo.approve('know_001', 'admin_1', 'Verified on Node 26');
+      expect(approved?.approval_status).toBe('approved');
+
+      // Now retrievable via lexical search
+      const afterApproval = knowledgeRepo.searchLexical('guild_123', 'sqlite build');
+      expect(afterApproval.length).toBe(1);
+      expect(afterApproval[0].canonical_answer).toContain('node:sqlite');
+
+      // Retrievable via vector search
+      const vectorResults = knowledgeRepo.searchVector('guild_123', [0.85, 0.15, 0.0], 5, 0.8);
+      expect(vectorResults.length).toBe(1);
+      expect(vectorResults[0].knowledge_id).toBe('know_001');
+
+      // Retrievable via hybrid search
+      const hybridResults = knowledgeRepo.searchHybrid('guild_123', 'sqlite build', [0.85, 0.15, 0.0]);
+      expect(hybridResults.length).toBe(1);
+      expect(hybridResults[0].retrieval_method).toBe('hybrid');
+    });
+
+    it('handles correction and superseding with version tracking', () => {
+      knowledgeRepo.createCandidate({
+        knowledge_id: 'know_002',
+        guild_id: 'guild_123',
+        question_patterns: ['How to reset password'],
+        canonical_answer: 'Click forgot password on web.',
+        created_by: 'admin_1',
+      });
+      knowledgeRepo.approve('know_002', 'admin_1');
+
+      // Now correct and supersede
+      const updated = knowledgeRepo.correctAndSupersede(
+        'know_002',
+        {
+          canonical_answer: 'Use /reset-password command in Discord directly.',
+          change_reason: 'Updated auth flow in v2',
+        },
+        'admin_2'
+      );
+
+      expect(updated?.current_version).toBe(2);
+      expect(updated?.canonical_answer).toBe('Use /reset-password command in Discord directly.');
+
+      // Check version history
+      const versions = knowledgeRepo.getVersions('know_002');
+      expect(versions.length).toBe(2);
+      expect(versions[0].version).toBe(2);
+      expect(versions[0].approval_state).toBe('approved');
+      expect(versions[1].version).toBe(1);
+      expect(versions[1].approval_state).toBe('superseded');
+    });
+
+    it('enforces server isolation so other guilds cannot retrieve knowledge', () => {
+      knowledgeRepo.createCandidate({
+        knowledge_id: 'know_guild1',
+        guild_id: 'guild_123',
+        question_patterns: ['Internal secret key procedure'],
+        canonical_answer: 'Internal doc for guild 123 only.',
+        created_by: 'admin_1',
+      });
+      knowledgeRepo.approve('know_guild1', 'admin_1');
+
+      // Guild 999 searches
+      const searchOtherGuild = knowledgeRepo.searchLexical('guild_999', 'Internal secret key');
+      expect(searchOtherGuild.length).toBe(0);
+    });
+
+    it('rejects candidate and prevents retrieval', () => {
+      knowledgeRepo.createCandidate({
+        knowledge_id: 'know_bad',
+        guild_id: 'guild_123',
+        question_patterns: ['Disable all firewalls'],
+        canonical_answer: 'Run sudo rm -rf /',
+        created_by: 'hacker',
+      });
+
+      knowledgeRepo.reject('know_bad', 'admin_1', 'Dangerous instruction');
+      const item = knowledgeRepo.get('know_bad');
+      expect(item?.approval_status).toBe('rejected');
+
+      const lexical = knowledgeRepo.searchLexical('guild_123', 'Disable firewalls');
+      expect(lexical.length).toBe(0);
+    });
+  });
+
+  describe('Incidents and GitHub Linkages', () => {
+    beforeEach(() => {
+      // Ensure test cases exist for foreign key constraints
+      caseRepo.create({
+        case_id: 'case_inc_1',
+        guild_id: 'guild_123',
+        channel_id: 'chan_support',
+        message_id: 'msg_inc_1',
+        requester_id: 'user_1',
+        requester_username: 'alice',
+        category: 'points',
+        title: 'Points missing',
+        status: 'new',
+      });
+      caseRepo.create({
+        case_id: 'case_inc_2',
+        guild_id: 'guild_123',
+        channel_id: 'chan_support',
+        message_id: 'msg_inc_2',
+        requester_id: 'user_2',
+        requester_username: 'bob',
+        category: 'points',
+        title: 'Points not updated',
+        status: 'new',
+      });
+    });
+
+    it('creates shared incident, links cases, and updates verification', () => {
+      const inc = incidentRepo.create({
+        incident_id: 'inc_01',
+        guild_id: 'guild_123',
+        title: 'Points not synchronizing after DEV challenge submission',
+        symptom_cluster: 'points_sync_failure_error_503',
+        verification_state: 'suspected',
+      });
+
+      incidentRepo.linkCase('inc_01', 'case_inc_1');
+      incidentRepo.linkCase('inc_01', 'case_inc_2');
+
+      const updatedInc = incidentRepo.get('inc_01');
+      expect(updatedInc?.affected_case_count).toBe(2);
+
+      incidentRepo.updateVerification('inc_01', 'confirmed', 'Backend webhook backlog');
+      const confirmed = incidentRepo.get('inc_01');
+      expect(confirmed?.verification_state).toBe('confirmed');
+    });
+
+    it('creates and tracks GitHub issue drafts', () => {
+      const draft = githubRepo.createDraft({
+        link_id: 'link_01',
+        case_id: 'case_inc_1',
+        repo_owner: 'sea-deep',
+        repo_name: 'threadsherpa',
+        draft_title: 'Bug: SQLite native bindings crash on Node 26',
+        draft_body: '## Description\nNative bindings failed to compile...',
+        created_by: 'copilot',
+      });
+
+      expect(draft.status).toBe('draft');
+
+      const created = githubRepo.markCreated('link_01', 42, 'https://github.com/sea-deep/threadsherpa/issues/42', 'admin_1');
+      expect(created?.status).toBe('created');
+      expect(created?.issue_number).toBe(42);
+    });
+  });
+});
