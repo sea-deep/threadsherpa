@@ -95,10 +95,16 @@ export class GuildConfigRepository {
     }
   }
 
-  isSupportChannel(guildId: string, channelId: string): boolean {
+  isSupportChannel(guildId: string, channelId: string, parentId?: string | null): boolean {
     const config = this.get(guildId);
     if (!config) return false;
-    return config.support_channel_ids.includes(channelId);
+    // One-time setup requirement: Server must have explicitly configured support channels
+    if (!config.support_channel_ids || config.support_channel_ids.length === 0) {
+      return false;
+    }
+    if (config.support_channel_ids.includes(channelId)) return true;
+    if (parentId && config.support_channel_ids.includes(parentId)) return true;
+    return false;
   }
 
   isAdmin(guildId: string, userRoleIds: string[]): boolean {

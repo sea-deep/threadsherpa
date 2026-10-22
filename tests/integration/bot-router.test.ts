@@ -156,7 +156,10 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
         roles: { cache: new Map() },
       },
       options: {
-        getChannel: vi.fn().mockReturnValue({ id: 'chan_new_support' }),
+        getChannel: vi.fn((name: string) => {
+          if (name === 'channel') return { id: 'chan_new_support' };
+          return null;
+        }),
         getRole: vi.fn().mockReturnValue({ id: 'role_new_admin' }),
         getString: vi.fn((name: string) => {
           if (name === 'allowed_domain') return 'api.github.com';
@@ -296,6 +299,7 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
       content: 'Always add exponential backoff when catching DiscordAPIError 429.',
       author: { id: adminUserId, bot: false, tag: 'alex#0001' },
       system: false,
+      channel: { isThread: () => false, parentId: null },
       member: {
         permissions: new PermissionsBitField(PermissionsBitField.Flags.Administrator),
         roles: { cache: new Map() },
@@ -309,5 +313,149 @@ describe('BotInteractionRouter & Discord Gateway Integration', () => {
     const pending = knowledgeRepo.getPendingCandidates(guildId);
     expect(pending.length).toBe(1);
     expect(pending[0].canonical_answer).toContain('exponential backoff');
+  });
+
+  it('ignores messages in channels before one-time setup designates them as support channels', async () => {
+    const unconfiguredChannelId = 'chan_general_chat';
+    const replyMock = vi.fn();
+    const msg = {
+      guildId,
+      channelId: unconfiguredChannelId,
+      content: 'Can someone help me with my database connection?',
+      author: { id: 'user_rando', bot: false, username: 'rando', tag: 'rando#1234' },
+      system: false,
+      channel: { isThread: () => false, parentId: null },
+      member: {
+        permissions: new PermissionsBitField(),
+        roles: { cache: new Map() },
+      },
+      reply: replyMock,
+    } as unknown as Message;
+
+    await router.handleMessage(msg);
+
+    // Should not reply and should not create any support case
+    expect(replyMock).not.toHaveBeenCalled();
+    const activeCase = caseRepo.findActiveCase(unconfiguredChannelId);
+    expect(activeCase).toBeNull();
+  });
+
+  it('scans and responds to new forum posts and threads inside configured channels', async () => {
+    const forumChannelId = 'forum_troubleshooting';
+    // Add forum to configured support channels
+    guildRepo.upsert({
+      guild_id: guildId,
+      support_channel_ids: [supportChannelId, forumChannelId],
+    });
+
+    const threadSendMock = vi.fn().mockResolvedValue(true);
+    const forumThread = {
+      id: 'thread_forum_post_1',
+      guildId,
+      parentId: forumChannelId,
+      name: 'V8 compilation failure with node 26',
+      ownerId: 'user_coder',
+      fetchStarterMessage: vi.fn().mockResolvedValue({
+        id: 'msg_starter_1',
+        content: 'I get C++ syntax errors when running npm install better-sqlite3 on Node 26',
+        author: { id: 'user_coder', username: 'coder' },
+      }),
+      send: threadSendMock,
+    } as any;
+
+    await router.handleThreadCreate(forumThread);
+
+    expect(threadSendMock).toHaveBeenCalled();
+    const createdCase = caseRepo.getByThreadId('thread_forum_post_1');
+    expect(createdCase).toBeDefined();
+    expect(createdCase?.title).toBe('V8 compilation failure with node 26');
+    expect(createdCase?.summary).toContain('better-sqlite3');
+  });
+
+  it('updates case context when user provides follow-up logs in an active thread', async () => {
+    const activeThreadId = 'thread_user_context_test';
+    const initialCase = caseRepo.create({
+      case_id: 'case_context_tracking',
+      guild_id: guildId,
+      channel_id: supportChannelId,
+      thread_id: activeThreadId,
+      message_id: 'msg_init',
+      requester_id: 'user_dev',
+      requester_username: 'dev',
+      category: 'general',
+      title: 'Port collision error',
+      status: 'awaiting_user',
+      summary: 'Port 3000 is already in use',
+    });
+
+    const reactMock = vi.fn().mockResolvedValue(true);
+    const replyMock = vi.fn();
+    const followUpMsg = {
+      guildId,
+      channelId: activeThreadId,
+      content: 'Here is lsof output: node process 5821 is occupying port 3000',
+      author: { id: 'user_dev', bot: false, username: 'dev', tag: 'dev#0001' },
+      system: false,
+      channel: { isThread: () => true, parentId: supportChannelId },
+      member: {
+        permissions: new PermissionsBitField(),
+        roles: { cache: new Map() },
+      },
+      react: reactMock,
+      reply: replyMock,
+      url: 'https://discord.com/channels/123/456/789',
+    } as unknown as Message;
+
+    await router.handleMessage(followUpMsg);
+
+    // Verify context was appended to case summary
+    const updated = caseRepo.get(initialCase.case_id);
+    expect(updated?.summary).toContain('lsof output');
+    expect(updated?.summary).toContain('node process 5821');
+
+    // Verify evidence record was appended
+    const evidenceList = evidenceRepo.getByCaseId(initialCase.case_id);
+    const contextEv = evidenceList.find(e => e.source_type === 'discord_message' && e.metadata?.subtype === 'user_context');
+    expect(contextEv).toBeDefined();
+    expect(contextEv?.excerpt).toContain('node process 5821');
+    expect(reactMock).toHaveBeenCalledWith('📝');
+  });
+
+  it('allows manual context updates via /case update_context', async () => {
+    const c = caseRepo.create({
+      case_id: 'case_manual_update',
+      guild_id: guildId,
+      channel_id: supportChannelId,
+      message_id: 'msg_manual',
+      requester_id: 'user_mark',
+      requester_username: 'mark',
+      category: 'general',
+      title: 'Intermittent 502 bad gateway',
+      status: 'new',
+      summary: 'Getting 502 on nginx',
+    });
+
+    const replyMock = vi.fn();
+    const interaction = {
+      guildId,
+      channelId: supportChannelId,
+      commandName: 'case',
+      user: { id: 'user_mark', username: 'mark', tag: 'mark#0003' },
+      channel: { isThread: () => false, parentId: null },
+      options: {
+        getString: vi.fn((name: string) => {
+          if (name === 'case_id') return c.case_id;
+          if (name === 'update_context') return 'Found out backend service was OOM killed by kernel';
+          return null;
+        }),
+      },
+      reply: replyMock,
+    } as unknown as ChatInputCommandInteraction;
+
+    await router.handleCommand(interaction);
+
+    expect(replyMock).toHaveBeenCalled();
+    const updated = caseRepo.get(c.case_id);
+    expect(updated?.summary).toContain('OOM killed by kernel');
   });
 });

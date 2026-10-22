@@ -36,7 +36,8 @@ export type EvidenceSourceType =
   | 'web'
   | 'github_issue'
   | 'github_release'
-  | 'discord_message';
+  | 'discord_message'
+  | 'user_context';
 
 export interface CaseEvidence {
   evidence_id: string;

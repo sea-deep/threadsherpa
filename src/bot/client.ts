@@ -4,6 +4,7 @@ import {
   Partials,
   Interaction,
   Message,
+  ThreadChannel,
 } from 'discord.js';
 import { BotInteractionRouter } from './handlers/router.js';
 import { registerCommands } from './commands/register.js';
@@ -62,6 +63,14 @@ export function createBotClient(options: BotClientOptions): Client {
       await options.router.handleMessage(message);
     } catch (err) {
       logger.error({ err, messageId: message.id }, 'Unhandled error in message monitoring handler');
+    }
+  });
+
+  client.on('threadCreate', async (thread: ThreadChannel) => {
+    try {
+      await options.router.handleThreadCreate(thread);
+    } catch (err) {
+      logger.error({ err, threadId: thread.id }, 'Unhandled error in thread create handler');
     }
   });
 

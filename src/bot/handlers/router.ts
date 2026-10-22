@@ -2,6 +2,8 @@ import {
   ChatInputCommandInteraction,
   ButtonInteraction,
   Message,
+  ThreadChannel,
+  ChannelType,
   PermissionFlagsBits,
   GuildMember,
 } from 'discord.js';
@@ -91,6 +93,7 @@ export class BotInteractionRouter {
 
     const guildId = interaction.guildId!;
     const channel = interaction.options.getChannel('channel');
+    const removeChannel = interaction.options.getChannel('remove_channel');
     const adminRole = interaction.options.getRole('admin_role');
     const allowedDomain = interaction.options.getString('allowed_domain');
     const repo = interaction.options.getString('repo');
@@ -103,6 +106,7 @@ export class BotInteractionRouter {
     const connectedRepos = new Set(currentConfig?.connected_repos || []);
 
     if (channel) supportChannels.add(channel.id);
+    if (removeChannel) supportChannels.delete(removeChannel.id);
     if (adminRole) adminRoles.add(adminRole.id);
     if (allowedDomain) allowedDomains.add(allowedDomain.toLowerCase().trim());
     if (repo) connectedRepos.add(repo.trim());
@@ -116,10 +120,16 @@ export class BotInteractionRouter {
       connected_repos: Array.from(connectedRepos),
     });
 
+    const isConfigured = updated.support_channel_ids.length > 0;
+    const setupNotice = isConfigured
+      ? '✅ **ThreadSherpa Active**: Monitoring configured support channels, forum channels, and threads.'
+      : '⚠️ **Setup Incomplete**: No support channels designated. Add a channel with `/setup channel: #channel` before automatic scanning begins.';
+
     const summary = [
-      '### ⚙️ ThreadSherpa Server Configuration Updated',
+      '### ⚙️ ThreadSherpa Server Configuration',
+      setupNotice,
       `• **Autonomy Mode**: \`${updated.autonomy_mode}\``,
-      `• **Support Channels**: ${updated.support_channel_ids.map(id => `<#${id}>`).join(', ') || '*None*' }`,
+      `• **Monitored Support Channels**: ${updated.support_channel_ids.map(id => `<#${id}>`).join(', ') || '*None*' }`,
       `• **Admin Roles**: ${updated.admin_role_ids.map(id => `<@&${id}>`).join(', ') || '*Server Admins only*' }`,
       `• **Allowed Doc Domains**: ${updated.allowed_domains.map(d => `\`${d}\``).join(', ') || '*None*' }`,
       `• **Connected Repositories**: ${updated.connected_repos.map(r => `\`${r}\``).join(', ') || '*None*' }`,
@@ -169,22 +179,73 @@ export class BotInteractionRouter {
 
   private async handleCase(interaction: ChatInputCommandInteraction): Promise<void> {
     const caseIdOption = interaction.options.getString('case_id');
-    const caseId = caseIdOption || this.caseRepo.findActiveCase(interaction.channelId)?.case_id;
+    const updateContext = interaction.options.getString('update_context');
+    const action = interaction.options.getString('action');
+
+    const isThread = interaction.channel?.isThread();
+    const parentId = isThread ? interaction.channel.parentId : null;
+    const threadId = isThread ? interaction.channelId : undefined;
+
+    const caseId = caseIdOption || this.caseRepo.findActiveCase(parentId || interaction.channelId, threadId)?.case_id;
 
     if (!caseId) {
-      await interaction.reply({ content: 'No active support case found in this channel. Specify a `case_id`.', ephemeral: true });
+      await interaction.reply({ content: 'No active support case found in this channel or thread. Specify a `case_id`.', ephemeral: true });
       return;
     }
 
-    const c = this.caseRepo.get(caseId);
+    let c = this.caseRepo.get(caseId);
     if (!c || c.guild_id !== interaction.guildId) {
       await interaction.reply({ content: `Case \`${caseId}\` not found.`, ephemeral: true });
       return;
     }
 
+    // 1. If context update provided, update case summary and record evidence
+    if (updateContext && updateContext.trim().length > 0) {
+      const author = interaction.user.username;
+      const note = `[Context Update from @${author}]: ${updateContext.trim()}`;
+      const updatedSummary = `${c.summary || c.title}\n\n${note}`.slice(0, 3000);
+      c = this.caseRepo.updateSummary(caseId, updatedSummary)!;
+
+      this.evidenceRepo.add({
+        evidence_id: `ev_ctx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        case_id: caseId,
+        source_type: 'discord_message',
+        source_url: `discord://interaction/${interaction.id}`,
+        title: `Manual Context Update by ${author}`,
+        excerpt: updateContext.trim().slice(0, 500),
+        authority_score: 0.8,
+        metadata: { subtype: 'user_context', updated_by: author },
+      });
+    }
+
+    // 2. Perform requested action
+    if (action === 'resolve') {
+      c = this.caseRepo.updateStatus(caseId, 'resolved', 'Marked resolved via /case')!;
+    } else if (action === 'close') {
+      c = this.caseRepo.updateStatus(caseId, 'closed', 'Closed via /case')!;
+    } else if (action === 'reinvestigate') {
+      if (typeof interaction.deferReply === 'function') {
+        await interaction.deferReply();
+      }
+      await this.orchestrator.investigateCase(caseId);
+      c = this.caseRepo.get(caseId)!;
+      const evidence = this.evidenceRepo.getByCaseId(caseId);
+      const embed = buildCaseEmbed(c, evidence);
+      if (typeof interaction.editReply === 'function') {
+        await interaction.editReply({
+          content: updateContext ? '📝 **Case Context Updated & Re-investigated**' : '🔄 **Case Re-investigated**',
+          embeds: [embed],
+        });
+      }
+      return;
+    }
+
     const evidence = this.evidenceRepo.getByCaseId(caseId);
     const embed = buildCaseEmbed(c, evidence);
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      content: updateContext ? '📝 **Case Context Successfully Updated**' : undefined,
+      embeds: [embed],
+    });
   }
 
   private async handleTeach(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -364,17 +425,84 @@ export class BotInteractionRouter {
     }
   }
 
-  async handleMessage(message: Message): Promise<void> {
-    // 1. Ignore bots and own messages
-    if (message.author.bot || message.system) return;
-    if (!message.guildId) return;
+  async handleThreadCreate(thread: ThreadChannel): Promise<void> {
+    if (!thread.guildId) return;
 
-    // 2. Only monitor configured support channels
-    if (!this.guildRepo.isSupportChannel(message.guildId, message.channelId)) {
+    // 1. One-time setup & support channel check:
+    // Only monitor if this thread or its parent (Forum or Text channel) is in support_channel_ids
+    if (!this.guildRepo.isSupportChannel(thread.guildId, thread.id, thread.parentId)) {
       return;
     }
 
-    logger.debug({ channelId: message.channelId, author: message.author.tag }, 'Monitoring support channel message');
+    logger.info({ threadId: thread.id, parentId: thread.parentId, name: thread.name }, 'New support thread/forum post detected');
+
+    // 2. Avoid duplicate cases if already registered
+    const existingCase = this.caseRepo.getByThreadId(thread.id);
+    if (existingCase) return;
+
+    // 3. In Forum channels or text threads, fetch starter message if available
+    let starterMessage = await thread.fetchStarterMessage().catch(() => null);
+    if (!starterMessage) {
+      await new Promise(r => setTimeout(r, 1000));
+      starterMessage = await thread.fetchStarterMessage().catch(() => null);
+    }
+
+    const questionTitle = thread.name || starterMessage?.content?.slice(0, 100) || 'Support Inquiry';
+    const questionContent = starterMessage?.content || thread.name || 'Support Inquiry';
+    const requesterId = starterMessage?.author?.id || thread.ownerId || 'unknown_user';
+    const requesterUsername = starterMessage?.author?.username || 'user';
+
+    // 4. Create support case
+    const caseId = `case_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const newCase = this.caseRepo.create({
+      case_id: caseId,
+      guild_id: thread.guildId,
+      channel_id: thread.parentId || thread.id,
+      thread_id: thread.id,
+      message_id: starterMessage?.id || thread.id,
+      requester_id: requesterId,
+      requester_username: requesterUsername,
+      category: 'general',
+      title: questionTitle,
+      status: 'new',
+      summary: questionContent,
+    });
+
+    // 5. Check incident clustering
+    this.incidentDetector.detectCluster(newCase);
+
+    // 6. Check autonomy mode
+    const config = this.guildRepo.get(thread.guildId);
+    if (config?.autonomy_mode === 'observe') {
+      logger.info({ caseId, threadId: thread.id }, 'Observe mode active; skipping automated response in new thread');
+      return;
+    }
+
+    // 7. Investigate and post response directly into the thread/forum post
+    await this.orchestrator.investigateCase(caseId);
+    const updated = this.caseRepo.get(caseId)!;
+    const evidence = this.evidenceRepo.getByCaseId(caseId);
+    const embed = buildCaseEmbed(updated, evidence);
+
+    await Promise.resolve(thread.send({ embeds: [embed] })).catch(err => {
+      logger.warn({ err, threadId: thread.id }, 'Failed to post investigation embed to thread');
+    });
+  }
+
+  async handleMessage(message: Message): Promise<void> {
+    // 1. Ignore bots and own messages
+    if (message.author?.bot || message.system) return;
+    if (!message.guildId) return;
+
+    // 2. Only monitor configured support channels (requires one-time setup)
+    const isThread = Boolean(message.channel && typeof message.channel.isThread === 'function' && message.channel.isThread());
+    const parentId = isThread && message.channel && 'parentId' in message.channel ? (message.channel.parentId as string | null) : null;
+
+    if (!this.guildRepo.isSupportChannel(message.guildId, message.channelId, parentId)) {
+      return;
+    }
+
+    logger.debug({ channelId: message.channelId, isThread, author: message.author.tag }, 'Monitoring support channel message');
 
     const member = message.member;
     const roleIds = member?.roles?.cache
@@ -382,8 +510,11 @@ export class BotInteractionRouter {
       : [];
     const isAdmin = (member?.permissions && typeof member.permissions.has === 'function' && member.permissions.has(PermissionFlagsBits.Administrator)) || this.guildRepo.isAdmin(message.guildId, roleIds);
 
-    // 3. Admin learning trigger: If admin replies in an active case, extract knowledge candidate!
-    const activeCase = this.caseRepo.findActiveCase(message.channelId, message.thread?.id);
+    // 3. Resolve active case (in thread or channel)
+    const threadId = isThread ? message.channelId : (message.thread?.id || undefined);
+    const activeCase = this.caseRepo.findActiveCase(parentId || message.channelId, threadId);
+
+    // 4. Admin learning trigger: If admin replies in an active case, extract knowledge candidate!
     if (isAdmin && activeCase && activeCase.requester_id !== message.author.id && message.content.length > 20) {
       logger.info({ caseId: activeCase.case_id, admin: message.author.tag }, 'Admin response detected in active case — proposing knowledge candidate');
 
@@ -394,7 +525,7 @@ export class BotInteractionRouter {
         adminMessage: message.content,
         caseContext: {
           title: activeCase.title,
-          originalQuestion: activeCase.title,
+          originalQuestion: activeCase.summary || activeCase.title,
           priorBotAnswer: activeCase.last_answer || undefined,
         },
       });
@@ -409,19 +540,75 @@ export class BotInteractionRouter {
       return;
     }
 
-    // 4. User question in support channel: auto-triage if autonomy mode permits
+    // 5. User follow-up in an existing active case -> Update case context!
+    if (activeCase && !isAdmin && message.content.length > 5) {
+      logger.info({ caseId: activeCase.case_id, author: message.author.tag }, 'User follow-up detected in active case — updating context');
+
+      const authorTag = message.author.username;
+      const note = `[Update from @${authorTag}]: ${message.content}`;
+      const newSummary = `${activeCase.summary || activeCase.title}\n\n${note}`.slice(0, 3000);
+      this.caseRepo.updateSummary(activeCase.case_id, newSummary);
+
+      this.evidenceRepo.add({
+        evidence_id: `ev_ctx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        case_id: activeCase.case_id,
+        source_type: 'discord_message',
+        source_url: message.url,
+        title: `Follow-up from ${authorTag}`,
+        excerpt: message.content.slice(0, 500),
+        authority_score: 0.7,
+        metadata: { subtype: 'user_context', updated_by: authorTag },
+      });
+
+      // Acknowledge context update with a reaction
+      await message.react('📝').catch(() => {});
+
+      // If the case was awaiting user input or the user asks a follow-up, re-investigate
+      const config = this.guildRepo.get(message.guildId);
+      const isAutoOrSupervised = config?.autonomy_mode === 'auto' || config?.autonomy_mode === 'supervised';
+      const needsResponse = activeCase.status === 'awaiting_user' || activeCase.status === 'triaging' || message.content.includes('?');
+
+      if (isAutoOrSupervised && needsResponse) {
+        await this.orchestrator.investigateCase(activeCase.case_id);
+        const updated = this.caseRepo.get(activeCase.case_id)!;
+        const evidence = this.evidenceRepo.getByCaseId(activeCase.case_id);
+        const embed = buildCaseEmbed(updated, evidence);
+        await message.reply({ embeds: [embed] });
+      }
+
+      return;
+    }
+
+    // 6. User new question in support channel: auto-triage if autonomy mode permits
     const config = this.guildRepo.get(message.guildId);
     if (config?.autonomy_mode === 'observe') {
       return; // Do not send unsolicited answer in observe mode
     }
 
     if (!activeCase && message.content.length > 10) {
+      // In a text channel, spawn a support thread if possible to keep channel tidy
+      let targetThreadId: string | null = isThread ? message.channelId : null;
+      let replyTarget: Message | ThreadChannel = message;
+
+      if (!isThread && message.channel.type === ChannelType.GuildText && 'threads' in message.channel) {
+        const spawnedThread = await (message.channel as any).threads?.create?.({
+          name: message.content.slice(0, 80),
+          autoArchiveDuration: 1440,
+        }).catch(() => null);
+
+        if (spawnedThread) {
+          targetThreadId = spawnedThread.id;
+          replyTarget = spawnedThread;
+        }
+      }
+
       // Create new case
       const caseId = `case_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const newCase = this.caseRepo.create({
         case_id: caseId,
         guild_id: message.guildId,
-        channel_id: message.channelId,
+        channel_id: parentId || message.channelId,
+        thread_id: targetThreadId,
         message_id: message.id,
         requester_id: message.author.id,
         requester_username: message.author.username,
@@ -435,12 +622,16 @@ export class BotInteractionRouter {
       this.incidentDetector.detectCluster(newCase);
 
       // Investigate
-      const invResult = await this.orchestrator.investigateCase(caseId);
+      await this.orchestrator.investigateCase(caseId);
       const updated = this.caseRepo.get(caseId)!;
       const evidence = this.evidenceRepo.getByCaseId(caseId);
 
       const embed = buildCaseEmbed(updated, evidence);
-      await message.reply({ embeds: [embed] });
+      if (targetThreadId && !isThread && replyTarget !== (message as unknown)) {
+        await (replyTarget as ThreadChannel).send({ embeds: [embed] });
+      } else {
+        await message.reply({ embeds: [embed] });
+      }
     }
   }
 }

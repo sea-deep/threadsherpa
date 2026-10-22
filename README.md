@@ -220,13 +220,33 @@ ThreadSherpa can be deployed to Render as a persistent background worker using e
 
 ---
 
-## 🎮 Discord Slash Commands
+## 🎮 Discord Channel Support & Slash Commands
+
+### Multi-Channel Architecture
+- **Forum Channels (`GuildForum`)**: Ideal for ticket-style communities. When a user creates a new forum post, ThreadSherpa automatically scans the title and starter message, creates a case, and posts the investigation findings into the post.
+- **Text Channels (`GuildText`)**: Traditional support channels. When a user posts a question, ThreadSherpa answers inline or spawns a dedicated support thread to keep the main channel clean.
+- **Threads (`PublicThread`, `PrivateThread`)**: Full thread monitoring. All follow-up discussion inside threads is automatically aggregated.
+
+### One-Time Setup Safety Protocol
+ThreadSherpa enforces a strict safety boundary: **it will never scan or read messages in a channel until that channel or forum is explicitly designated as a support channel**.
+- Run `/setup channel: #support-forum` to activate monitoring.
+- Run `/setup remove_channel: #old-channel` to remove a channel.
+
+### Dynamic Context Updates
+Support cases are rarely solved in a single message. As users paste follow-up logs, stack traces, or environment details in an active thread:
+1. ThreadSherpa appends the new facts directly into the active case summary and evidence ledger (reacting with 📝 to confirm).
+2. If the bot had previously asked a clarifying question, it automatically re-investigates with the new context.
+3. Users and admins can also explicitly update context at any time using `/case update_context: "Logs..." action: Re-investigate`.
+
+---
+
+## 💻 Slash Commands Reference
 
 | Command | Permission | Description |
 |---|---|---|
-| `/setup` | Administrator | Configure official support channels, admin roles, allowed doc domains, and repos |
+| `/setup [channel] [remove_channel] [admin_role]` | Administrator | One-time setup: add/remove monitored channels, configure admin roles & repo links |
 | `/ask [question]` | Public | Submit a question for evidence-backed autonomous investigation |
-| `/case [case_id]` | Public | Inspect a support case's status, evidence links, and investigation history |
+| `/case [case_id] [update_context] [action]` | Public | View case status, update context with new logs, or trigger re-investigation |
 | `/teach [question] [solution]` | Admin Role | Explicitly teach ThreadSherpa a canonical answer or troubleshooting procedure |
 | `/memory search [query]` | Public | Search approved server knowledge using hybrid lexical + vector search |
 | `/memory list` | Public | List active approved knowledge items |

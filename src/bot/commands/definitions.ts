@@ -9,8 +9,13 @@ export const setupCommand = new SlashCommandBuilder()
   .setDescription('Configure ThreadSherpa support channels, admin roles, and integrations')
   .addChannelOption(opt =>
     opt.setName('channel')
-      .setDescription('Designate a channel as an official support channel')
-      .addChannelTypes(ChannelType.GuildText, ChannelType.GuildForum)
+      .setDescription('Designate a text, forum, or announcement channel as an official support channel')
+      .addChannelTypes(ChannelType.GuildText, ChannelType.GuildForum, ChannelType.GuildAnnouncement)
+  )
+  .addChannelOption(opt =>
+    opt.setName('remove_channel')
+      .setDescription('Remove a channel from monitored support channels')
+      .addChannelTypes(ChannelType.GuildText, ChannelType.GuildForum, ChannelType.GuildAnnouncement)
   )
   .addRoleOption(opt =>
     opt.setName('admin_role')
@@ -45,10 +50,26 @@ export const askCommand = new SlashCommandBuilder()
 
 export const caseCommand = new SlashCommandBuilder()
   .setName('case')
-  .setDescription('Inspect support case status, findings, and verified evidence')
+  .setDescription('Inspect or update support case status, context, and verified evidence')
   .addStringOption(opt =>
     opt.setName('case_id')
-      .setDescription('Specific Case ID to inspect (defaults to current thread/channel case)')
+      .setDescription('Specific Case ID (defaults to current thread/channel case)')
+      .setRequired(false)
+  )
+  .addStringOption(opt =>
+    opt.setName('update_context')
+      .setDescription('Append new details, reproduction logs, or environment context to the active case')
+      .setRequired(false)
+  )
+  .addStringOption(opt =>
+    opt.setName('action')
+      .setDescription('Case action')
+      .addChoices(
+        { name: 'View Details', value: 'view' },
+        { name: 'Re-investigate with current context', value: 'reinvestigate' },
+        { name: 'Mark Resolved', value: 'resolve' },
+        { name: 'Close Case', value: 'close' }
+      )
       .setRequired(false)
   );
 
