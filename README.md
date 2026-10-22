@@ -2,6 +2,8 @@
 
 > *"Investigate once. Remember the resolution. Stop solving the same problem twice."*
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/sea-deep/threadsherpa)
+
 ThreadSherpa is an open-source, self-hostable Discord support copilot with **persistent, human-trained memory**. Built for technical communities, developer Discord servers, hackathons, open-source projects, and engineering support teams.
 
 Unlike generic FAQ bots or chat wrappers that blindly treat every message as memory or hallucinate unverified answers, ThreadSherpa operates like an experienced tier-2 support engineer: it investigates technical issues using permitted tools, validates evidence against official documentation and GitHub repositories, asks targeted questions when details are missing, escalates sensitive cases, and continuously learns from human support administrator corrections through an auditable approval workflow.
@@ -15,7 +17,7 @@ Unlike generic FAQ bots or chat wrappers that blindly treat every message as mem
 | Blindly treats every chat message as memory | Human-in-the-loop review cards for approved, versioned knowledge |
 | Hallucinates solutions when information is missing | Enforces deterministic response policy and asks targeted follow-ups |
 | Single-turn prompt-response loop | Bounded autonomous investigation loop (Plan -> Act -> Evaluate -> Stop) |
-| Relies exclusively on expensive proprietary APIs | Hybrid: Local open-weights (`gemma4` via Ollama) OR cloud APIs (Gemini, Groq, OpenAI) |
+| Relies exclusively on expensive proprietary APIs | Flexible: Paper Instruments (`ultramarine-1-flash`), local open-weights (`gemma4`), or cloud APIs |
 | Ephemeral in-memory context lost on restart | Durable persistence: SQLite (`node:sqlite` + FTS5) or MongoDB Atlas (Vector Search) |
 | Ignores developer tools and repositories | Searches connected GitHub repos, checks duplicates, and drafts issues |
 | Treats repeated complaints as isolated tickets | Detects shared incident clusters and alerts administrators to outages |
@@ -104,9 +106,10 @@ ThreadSherpa is designed as a modular monolith with strict separation between de
 ## 🏆 Supported Platforms & Challenge Integrations
 
 - **MongoDB Atlas**: Native database backend support (`DATABASE_PROVIDER=mongodb`). Uses Atlas Vector Search (`$vectorSearch`), Atlas Full-Text indexes, and versioned collections (`knowledge_items`, `knowledge_versions`, `knowledge_reviews`, `support_cases`).
-- **Flexible AI Inference (Local & Cloud)**:
-  - **Local Open-Weight**: `gemma4:e4b-it-qat` (7.5B, context 131k) and `embeddinggemma-2:270m` (768 dimensions) via local Ollama.
-  - **Cloud Ready**: Standard OpenAI-compatible client connecting to Google Gemini (`gemini-2.0-flash`), Groq (`llama-3.3-70b-versatile`), OpenRouter, or OpenAI (`gpt-4o-mini`).
+- **Primary AI Reasoning Models**:
+  - **Paper Instruments (`ultramarine-1-flash`)**: Frontier knowledge reasoning model post-trained specifically for qualitative knowledge work, technical explanation, and troubleshooting synthesis.
+  - **Google Gemma (`gemma4:e4b-it-qat` & `embeddinggemma-2:270m`)**: 100% private, zero-cost open-weight reasoning running locally on device via Ollama.
+  - **Cloud Alternatives**: Google Gemini (`gemini-2.0-flash`), Groq (`llama-3.3-70b-versatile`), OpenRouter, or OpenAI (`gpt-4o-mini`).
 - **Sentry Agent Tracing**: Distributed tracing using `@sentry/node` to measure latency, tool execution, model prompt repairs, and investigation spans.
 - **SerpApi**: Real-time Google Web Search tool for unblocking investigations on third-party libraries, GitHub issues, and compiler errors.
 - **Render**: Production cloud deployment ready via `render.yaml` blueprint.
@@ -151,15 +154,20 @@ DISCORD_BOT_TOKEN=your_bot_token_here
 DISCORD_CLIENT_ID=your_client_id_here
 DISCORD_DEV_GUILD_ID=your_test_guild_id_here
 
-# AI Model Provider: 'ollama' (default) | 'gemini' | 'groq' | 'openai' | 'openrouter'
-MODEL_PROVIDER=ollama
+# AI Model Provider: 'paper' | 'ollama' (default) | 'gemini' | 'groq' | 'openai'
+MODEL_PROVIDER=paper
 
-# Option A: Local Ollama (Zero cost, runs locally)
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=gemma4:e4b-it-qat
-OLLAMA_EMBEDDING_MODEL=embeddinggemma-2:270m
+# Choice 1: Paper Instruments (Primary Frontier Reasoning Choice)
+PAPER_INSTRUMENTS_API_KEY=your_paper_instruments_api_key_here
+PAPER_MODEL=ultramarine-1-flash
 
-# Option B: Cloud AI Inference (Render / Serverless)
+# Choice 2: Local Open-Weight Inference (Zero cost, runs offline on device)
+# MODEL_PROVIDER=ollama
+# OLLAMA_BASE_URL=http://localhost:11434
+# OLLAMA_MODEL=gemma4:e4b-it-qat
+# OLLAMA_EMBEDDING_MODEL=embeddinggemma-2:270m
+
+# Choice 3: Cloud APIs (Gemini / Groq / OpenAI)
 # MODEL_PROVIDER=gemini
 # GEMINI_API_KEY=your_gemini_api_key
 # OPENAI_MODEL=gemini-2.0-flash

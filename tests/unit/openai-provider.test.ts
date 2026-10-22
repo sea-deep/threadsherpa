@@ -163,5 +163,17 @@ describe('OpenAI-Compatible & Cloud Model Provider', () => {
       const provider = createModelProvider(config);
       expect(provider).toBeInstanceOf(OpenAICompatibleProvider);
     });
+
+    it('initializes Paper Instruments provider when MODEL_PROVIDER is paper', () => {
+      const config = loadConfig({
+        MODEL_PROVIDER: 'paper',
+        PAPER_INSTRUMENTS_API_KEY: 'test-paper-key',
+        DISCORD_BOT_TOKEN: 'mock_token',
+        DISCORD_CLIENT_ID: 'mock_client',
+      });
+
+      const provider = createModelProvider(config);
+      expect(provider).toBeInstanceOf(OpenAICompatibleProvider);
+    });
   });
 });

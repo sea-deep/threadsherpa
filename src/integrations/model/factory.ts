@@ -6,6 +6,23 @@ import { logger } from '../../utils/logger.js';
 
 export function createModelProvider(config: AppConfig): ModelProvider {
   switch (config.MODEL_PROVIDER) {
+    case 'paper':
+    case 'paperinstruments': {
+      const apiKey = config.PAPER_INSTRUMENTS_API_KEY || config.PAPERINSTRUMENTS_API_KEY || config.OPENAI_API_KEY || '';
+      const baseUrl = config.OPENAI_BASE_URL || 'https://api.paperinstruments.com/v1';
+      const model = config.PAPER_MODEL || config.OPENAI_MODEL || 'ultramarine-1-flash';
+      const embeddingModel = config.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
+
+      logger.info({ provider: 'Paper Instruments', model, baseUrl }, 'Initializing Paper Instruments Ultramarine model provider');
+      return new OpenAICompatibleProvider({
+        apiKey,
+        baseUrl,
+        model,
+        embeddingModel,
+        defaultTimeoutMs: config.OLLAMA_TIMEOUT_MS,
+      });
+    }
+
     case 'gemini': {
       const apiKey = config.GEMINI_API_KEY || config.OPENAI_API_KEY || '';
       const baseUrl = config.OPENAI_BASE_URL || 'https://generativelanguage.googleapis.com/v1beta/openai';

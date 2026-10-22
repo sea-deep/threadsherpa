@@ -27,7 +27,11 @@ services:
       - key: SERPAPI_API_KEY
         sync: false # Optional SerpApi Google search key
       - key: MODEL_PROVIDER
-        value: gemini # 'gemini' | 'openai' | 'groq' | 'openrouter' | 'ollama'
+        value: paper # 'paper' | 'gemini' | 'openai' | 'groq' | 'ollama'
+      - key: PAPER_INSTRUMENTS_API_KEY
+        sync: false # Set via Render Dashboard when using Paper Instruments (Ultramarine 1 Flash)
+      - key: PAPER_MODEL
+        value: ultramarine-1-flash
       - key: GEMINI_API_KEY
         sync: false # Set via Render Dashboard when using Google Gemini cloud inference
       - key: OPENAI_API_KEY
