@@ -17,3 +17,7 @@ sandbox-api/.env
 .astro/
 .env.*
 !.env.example
+
+# Local design tooling and generated verification reports
+.taste-skill/
+data/*.json

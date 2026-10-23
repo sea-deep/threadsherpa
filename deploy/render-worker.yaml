@@ -1,0 +1,32 @@
+# Optional Discord gateway worker. The model endpoint must be hosted separately.
+services:
+  - type: worker
+    name: threadsherpa
+    runtime: node
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    autoDeployTrigger: commit
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: threadsherpa
+      - key: DISCORD_BOT_TOKEN
+        sync: false
+      - key: MODEL_PROVIDER
+        value: paper
+      - key: PAPER_INSTRUMENTS_API_KEY
+        sync: false
+      - key: PAPER_MODEL
+        value: ultramarine-1-flash
+      - key: OLLAMA_BASE_URL
+        sync: false
+      - key: OLLAMA_MODEL
+        value: gemma4:e4b-it-qat
+      - key: OLLAMA_EMBEDDING_MODEL
+        value: embeddinggemma-2:270m
+      - key: SENTRY_DSN
+        sync: false

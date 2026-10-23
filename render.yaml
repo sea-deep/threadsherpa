@@ -1,32 +1,20 @@
-# Optional Discord gateway worker. The model endpoint must be hosted separately.
+# Public website only. The Discord bot runs separately.
 services:
-  - type: worker
+  - type: web
     name: threadsherpa
-    runtime: node
-    plan: starter
-    buildCommand: npm ci && npm run build
-    startCommand: npm start
-    autoDeployTrigger: commit
+    runtime: static
+    buildCommand: npm ci --prefix website && npm run build --prefix website
+    staticPublishPath: website/dist
+    autoDeployTrigger: off
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: MONGODB_URI
-        sync: false
-      - key: MONGODB_DB_NAME
-        value: threadsherpa
-      - key: DISCORD_BOT_TOKEN
-        sync: false
-      - key: MODEL_PROVIDER
-        value: paper
-      - key: PAPER_INSTRUMENTS_API_KEY
-        sync: false
-      - key: PAPER_MODEL
-        value: ultramarine-1-flash
-      - key: OLLAMA_BASE_URL
-        sync: false
-      - key: OLLAMA_MODEL
-        value: gemma4:e4b-it-qat
-      - key: OLLAMA_EMBEDDING_MODEL
-        value: embeddinggemma-2:270m
-      - key: SENTRY_DSN
-        sync: false
+      - key: NODE_VERSION
+        value: 24.22.1
+      - key: SKIP_INSTALL_DEPS
+        value: "true"
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin

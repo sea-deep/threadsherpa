@@ -72,13 +72,13 @@ export async function checkSetup(): Promise<boolean> {
     ready = false; return 'FIX  Paper Instruments access could not be verified. Check the key in https://platform.paperinstruments.com/';
   })());
   for (const line of await Promise.all(checks)) console.log(line);
-  console.log(ready ? '\nReady. Run npm run dev, then from a regular text channel use /setup channel:#your-support-forum autonomy_mode:auto.\n' : '\nFinish the items above, then run npm run setup again. Full guide: docs/START_HERE.md\n');
+  console.log(ready ? '\nReady. Run npm run dev, then from a regular text channel use /setup channel:#your-support-forum autonomy_mode:auto.\n' : '\nFinish the items above, then run npm run setup again. Full guide: docs/SETUP.md\n');
   return ready;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   checkSetup().then(ready => { process.exitCode = ready ? 0 : 1; }).catch(() => {
-    console.error('Setup check could not finish. Check the variable names and values in .env. See docs/START_HERE.md.');
+    console.error('Setup check could not finish. Check the variable names and values in .env. See docs/SETUP.md.');
     process.exitCode = 1;
   });
 }

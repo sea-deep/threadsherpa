@@ -1,46 +1,4 @@
 @font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-400.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-500.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Inter";
-  src: url("/fonts/inter-600.woff2") format("woff2");
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Space Grotesk";
-  src: url("/fonts/space-grotesk-500.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Space Grotesk";
-  src: url("/fonts/space-grotesk-600.woff2") format("woff2");
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Space Grotesk";
-  src: url("/fonts/space-grotesk-700.woff2") format("woff2");
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
   font-family: "JetBrains Mono";
   src: url("/fonts/jetbrains-mono-400.woff2") format("woff2");
   font-weight: 400;
@@ -887,7 +845,6 @@ h3 {
 .scene__panel {
   margin-left: 33px;
   padding: 0.55rem 0.7rem;
-  border-left: 2px solid var(--lantern);
   border-radius: 0 6px 6px 0;
   background: rgba(22, 32, 43, 0.7);
   font-size: 0.81rem;

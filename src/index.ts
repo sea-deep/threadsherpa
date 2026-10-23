@@ -26,7 +26,7 @@ export async function bootstrap() {
 
   const config = getConfig();
   const missing = setupProblems(config);
-  if (missing.length) throw new Error(`Setup needs a few values:\n${missing.join('\n')}\nRun npm run setup or open docs/START_HERE.md.`);
+  if (missing.length) throw new Error(`Setup needs a few values:\n${missing.join('\n')}\nRun npm run setup or open docs/SETUP.md.`);
 
   // 1. Initialize Sentry Agent Tracing (if configured)
   if (config.SENTRY_DSN) {

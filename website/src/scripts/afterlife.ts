@@ -42,12 +42,12 @@ async function loadMessages() {
       if (!root) continue;
       const theme = document.createElement("style");
       theme.textContent = `
-        :host{font-family:var(--font-body);color:#d2cbdc;padding:0;line-height:1.6}
+        :host{font-family:var(--font-body);font-size:16px;color:#d2cbdc;padding:0;line-height:1.6}
         .discord-message-content{min-width:0;padding-top:0;line-height:1.6}
         :host .discord-message-body,:host .discord-message-markup{font:inherit;line-height:1.6}
         .discord-author-avatar{margin-right:12px;min-width:32px;margin-top:3px}
         .discord-author-avatar img{width:32px;height:32px;cursor:default}
-        .discord-message-timestamp{font-size:10px;color:#95899f;margin-left:8px}
+        .discord-message-timestamp{font-size:12px;color:#b6adbf;margin-left:8px}
         :host(:hover){background:transparent}
         @media(max-width:600px){.discord-author-avatar{min-width:27px;margin-right:9px}
           .discord-author-avatar img{width:27px;height:27px}}
@@ -89,12 +89,13 @@ function setStep(next: number, enhanced = true) {
     if (index === next) button.setAttribute("aria-current", "step");
     else button.removeAttribute("aria-current");
   });
-  captions.forEach((caption, index) =>
+  captions.forEach((caption, index) => {
+    caption.hidden = index !== (enhanced ? next : 0);
     caption.setAttribute(
       "aria-hidden",
       String(enhanced ? index !== next : index !== 0),
-    ),
-  );
+    );
+  });
   const activeScene = next < 2 ? "source" : next < 4 ? "next" : "unknown";
   scenes.forEach((scene) => {
     const hidden = enhanced && scene.dataset.chatScene !== activeScene;
@@ -120,12 +121,6 @@ function setStep(next: number, enhanced = true) {
         : "Can I update my project?";
   document.querySelector("[data-thread-status]")!.textContent =
     next === 4 ? "Waiting" : next >= 2 && solved ? "Resolved" : "Open";
-  document.querySelector("[data-story-note]")!.textContent =
-    next === 4
-      ? "No matching facts. No public filler message."
-      : next === 3
-        ? "The next message belongs to the same conversation."
-        : "The useful bit is the answer, not another dashboard.";
   closeSource();
   const nextScene = document.querySelector<HTMLElement>(".chat-scene--next")!;
   requestAnimationFrame(() =>
@@ -141,8 +136,9 @@ function configureMotion() {
   storyTrigger = undefined;
   story.classList.remove("is-enhanced");
   step = -1;
-  const enhanced = !paused() && innerHeight >= (innerWidth <= 600 ? 820 : 740);
+  const enhanced = !paused() && innerHeight >= 850 && innerWidth >= 900;
   story.classList.toggle("is-enhanced", enhanced);
+  stage.toggleAttribute("data-ui", enhanced);
   setStep(0, enhanced);
   motionContext = gsap.context(() => {
     if (enhanced) {
@@ -399,8 +395,6 @@ function selectNode(index: number) {
   nodeButtons.forEach((button, i) =>
     button.setAttribute("aria-pressed", String(i === index)),
   );
-  document.querySelector("[data-route-count]")!.textContent =
-    `0${index + 1} / 04`;
   document.querySelector("[data-node-detail]")!.textContent =
     quietRoute && index === 2
       ? "No usable evidence was found. Skip the reply-generation call instead of asking the model to guess."
