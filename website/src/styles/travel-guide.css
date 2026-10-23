@@ -4,9 +4,8 @@
 .travel-guide { position:absolute; top:0; left:0; width:160px; height:160px; visibility:hidden; pointer-events:none; transform-origin:center; will-change:transform; }
 .travel-guide[data-ready] { visibility:visible; }
 .travel-guide > .guide { position:relative; width:100%; z-index:1; }
-.travel-guide__shadow { position:absolute; width:55%; height:7%; left:20%; bottom:4%; border-radius:50%; background:#0003; filter:blur(4px); }
-.travel-guide[data-moving="true"] .travel-guide__shadow { opacity:.35; }
-.travel-guide[data-direction="left"] > .guide { transform:scaleX(-1); }
+.travel-guide__shadow { position:absolute; width:55%; height:7%; left:20%; bottom:4%; border-radius:50%; background:#0003; filter:blur(4px); opacity:.7; transition:opacity 500ms cubic-bezier(.16,1,.3,1); }
+.travel-guide[data-moving="true"] .travel-guide__shadow { opacity:.3; }
 .intro-guide-stop { position:absolute; right:1%; bottom:18px; width:148px; height:148px; }
 .problem-guide-stop { margin:20px 0 -35px 22%; width:132px; height:132px; }
 .save-guide-stop { position:absolute; right:8px; bottom:0; }
