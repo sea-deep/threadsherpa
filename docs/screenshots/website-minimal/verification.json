@@ -1,0 +1,14 @@
+{
+  "verifiedAt": "2026-10-23T08:18:14.029Z",
+  "checks": [
+    "Desktop: loaded fonts, no overflow, all three scroll phases.",
+    "Pause control: removes pinned motion and leaves full conversation readable.",
+    "Mobile: no horizontal overflow at 390px and 320px.",
+    "Reduced motion: static conversation and no animated canvas.",
+    "Sandbox: save an answer, post a prepared new question, receive a sourced reply, and open the original answer."
+  ],
+  "limitations": [
+    "No live model calls or changes to the Discord bot.",
+    "Embedded browser preview crashed; screenshots and checks used the installed skill browser."
+  ]
+}

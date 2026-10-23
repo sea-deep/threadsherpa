@@ -6,7 +6,7 @@ export interface GuildConfig {
   admin_role_ids: string[];
   support_channel_ids: string[];
   allowed_domains: string[];
-  connected_repos: string[];
+  documentation_urls: string[];
   retention_days: number;
   require_response_approval: boolean;
   created_at: string;
@@ -50,7 +50,7 @@ export class GuildConfigRepository {
         admin_role_ids: config.admin_role_ids || [],
         support_channel_ids: config.support_channel_ids || [],
         allowed_domains: config.allowed_domains || [],
-        connected_repos: config.connected_repos || [],
+        documentation_urls: config.documentation_urls || [],
         retention_days: config.retention_days ?? 90,
         require_response_approval: config.require_response_approval ?? false,
         created_at: now,
@@ -77,7 +77,7 @@ export class GuildConfigRepository {
   async isAdmin(guildId: string, userRoleIds: string[]): Promise<boolean> {
     const config = await this.get(guildId);
     if (!config) return false;
-    if (config.admin_role_ids.length === 0) return true; // If no roles configured yet, allow server admins
+    if (config.admin_role_ids.length === 0) return false; // Discord Administrator is checked by the caller.
     return config.admin_role_ids.some(r => userRoleIds.includes(r));
   }
 
@@ -88,7 +88,7 @@ export class GuildConfigRepository {
       admin_role_ids: Array.isArray(doc.admin_role_ids) ? doc.admin_role_ids.map(String) : [],
       support_channel_ids: Array.isArray(doc.support_channel_ids) ? doc.support_channel_ids.map(String) : [],
       allowed_domains: Array.isArray(doc.allowed_domains) ? doc.allowed_domains.map(String) : [],
-      connected_repos: Array.isArray(doc.connected_repos) ? doc.connected_repos.map(String) : [],
+      documentation_urls: Array.isArray(doc.documentation_urls) ? doc.documentation_urls.map(String) : [],
       retention_days: Number(doc.retention_days || 90),
       require_response_approval: Boolean(doc.require_response_approval),
       created_at: String(doc.created_at),

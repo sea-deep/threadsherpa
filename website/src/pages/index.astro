@@ -1,0 +1,63 @@
+---
+import Base from '../layouts/Base.astro';
+import DiscordStory from '../components/DiscordStory.astro';
+const chapters = ['Question', 'Save', 'Reply', 'Follow-up', 'No answer'];
+const captions = [
+  ['Someone asks.', 'So far, this is just a normal support thread.'],
+  ['A moderator answers. Save that.', 'Right-click the reply → Apps → Save this answer.'],
+  ['The question comes back.', 'Different wording. The same facts. A short, new reply.'],
+  ['Then comes a follow-up.', 'The bot uses the conversation, not just the post title.'],
+  ['This one is not covered.', 'The bot leaves the thread alone and queues it for a person.'],
+];
+const steps = [
+  { title: 'Start with the Discord event.', file: 'src/bot/handlers/router.ts', tech: 'discord.js', text: 'The bot reads new posts in the support channels you connect. A forum title, its starter message, and later replies belong to the same case.', note: 'Ordinary chat does not become knowledge.' },
+  { title: 'Look for facts the server saved.', file: 'src/memory/retriever.ts', tech: 'MongoDB + local embeddings', text: 'Try an exact question match first. Otherwise, search current approved knowledge with words and embeddings. Retrieval is scoped to the server.', note: 'Optional source pages must be chosen by a moderator.' },
+  { title: 'Write for this question.', file: 'src/agent/orchestrator.ts', tech: 'Paper Instruments or Ollama', text: 'The model gets the question, context, and retrieved evidence. It writes one to three short sentences, keeping the conditions and exceptions. The stored reply is a source, not a template.', note: 'With no usable evidence, this model call is skipped.' },
+  { title: 'Check before posting.', file: 'src/agent/policy.ts', tech: 'Response policy', text: 'Check the cited sources and any links in the draft. A supported answer can go back to the thread. An unsupported answer waits in the moderator queue.', note: 'Source checks establish where an answer came from. People still judge whether it is right.' },
+];
+---
+<Base title="ThreadSherpa · A Discord bot for repeat questions" description="Save a moderator's reply. ThreadSherpa uses the saved facts to answer the next version of that question. See the conversation and the code path.">
+  <section class="intro" id="top" aria-labelledby="intro-title">
+    <div class="wrap intro__inner">
+      <p class="intro-label">ThreadSherpa / Discord support</p>
+      <h1 id="intro-title"><span class="hero-line" data-hero-line>A Discord bot for{' '}</span><span class="hero-line hero-line--second" data-hero-line>repeat questions<span class="hero-period">.</span></span></h1>
+      <div class="intro__bottom"><p data-hero-copy>A moderator answers. You save the reply.<br />The bot handles the next version of that question.</p><a class="scroll-cue" href="#how-it-works"><span>Here's the flow</span><span class="scroll-cue__arrow" aria-hidden="true">↓</span></a></div>
+      <canvas class="thread-field" data-thread-field aria-hidden="true"></canvas>
+      <span class="intro__thread-note">Built to do the same work less often.</span>
+    </div>
+  </section>
+
+  <section class="walkthrough" id="how-it-works" data-walkthrough aria-label="A support conversation, from first question to follow-up">
+    <div class="story-sticky wrap">
+      <div class="story-heading"><div class="story-captions">{captions.map(([title, text], index) => <div data-caption={index}><h2>{title}</h2><p>{text}</p></div>)}</div><div class="story-chapters" aria-label="Conversation steps">{chapters.map((name,index) => <button type="button" class="chapter-button" data-seek-step={index} aria-label={`Show step ${index + 1}: ${name}`} aria-current={index === 0 ? 'step' : undefined}><span>0{index + 1}</span>{name}</button>)}</div></div>
+      <div class="story-composition"><div class="story-orbit" aria-hidden="true"></div><DiscordStory /><div class="memory-token" aria-hidden="true"><img src="/brand/mark.svg" width="22" height="20" alt="" /><span>1 saved answer</span><span class="memory-token__light"></span></div></div>
+      <div class="story-bottom"><p data-story-note>The useful bit is the answer, not another dashboard.</p><a class="text-link" href="#inside">What runs underneath <img src="/icons/arrow-right-linear.svg" width="18" height="18" alt="" /></a></div><div class="story-track" aria-hidden="true"><span data-story-progress></span></div>
+    </div>
+  </section>
+
+  <section class="inside-section wrap" id="inside" aria-labelledby="inside-title">
+    <div class="section-opening" data-reveal><div><p class="section-index">01 / Under the hood</p><h2 id="inside-title">What actually<br />happens.</h2></div><p>One bounded pass.<br />No autonomous investigation loop.</p></div>
+    <div class="architecture-layout">
+      <div class="architecture-console" data-architecture>
+        <div class="console-title"><span class="console-light"></span><span>new_question → answer_or_wait</span><span data-route-count>01 / 04</span></div>
+        <div class="machine-route" data-machine-route>
+          <svg class="machine-wires" data-machine-wires aria-hidden="true"><path class="wire-base" data-wire-base /><path class="wire-current" pathLength="1" data-wire-current /></svg>
+          {['Discord event', 'Retrieve saved facts', 'Write a reply', 'Check the reply'].map((name,index) => <button type="button" class="machine-node" data-machine-node={index} aria-pressed={index === 0 ? 'true' : 'false'}><span class="machine-port">0{index+1}</span><span>{name}<small>{['discord.js', 'MongoDB', 'Paper / Ollama', 'Response policy'][index]}</small></span><span class="node-indicator" aria-hidden="true"></span></button>)}
+        </div>
+        <div class="route-switch" role="group" aria-label="Inspect a support route"><button type="button" data-route="answer" aria-pressed="true">Covered question</button><button type="button" data-route="quiet" aria-pressed="false">Not covered</button></div>
+        <p class="route-outcome" data-route-outcome aria-live="polite">Reply in Discord, with the original source.</p>
+        <div class="node-detail"><p data-node-detail>{steps[0].text}</p><a class="code-link" data-node-source href={`https://github.com/sea-deep/threadsherpa/blob/main/${steps[0].file}`} target="_blank" rel="noopener noreferrer"><span data-node-file>{steps[0].file}</span><img src="/icons/arrow-right-up-linear.svg" width="14" height="14" alt="" /></a></div>
+      </div>
+      <div class="architecture-steps">{steps.map((step,index) => <article data-architecture-step={index}><span class="architecture-step-number">0{index+1}</span><h3>{step.title}</h3><p>{step.text}</p><span class="architecture-tech">{step.tech}</span><p class="architecture-note">{step.note}</p></article>)}</div>
+    </div>
+    <div class="save-path" data-reveal><div><p class="section-index">The other path</p><h3>Saving a reply.</h3></div><div><ol><li>Moderator selects a reply</li><li>Check for duplicate knowledge</li><li>Store approved facts in MongoDB</li></ol><p>The answer keeps its original question, source, and scope. Save the same knowledge twice and it reuses the existing entry.</p><a class="code-link" href="https://github.com/sea-deep/threadsherpa/blob/main/src/memory/learner.ts" target="_blank" rel="noopener noreferrer">src/memory/learner.ts <img src="/icons/arrow-right-up-linear.svg" width="14" height="14" alt="" /></a></div></div>
+  </section>
+
+  <section class="limits-section wrap" aria-labelledby="limits-title"><div data-reveal><p class="section-index">02 / The small print, kept small</p><h2 id="limits-title">A few deliberate<br />limits.</h2></div><div class="limits-list"><details data-reveal><summary>It does not learn from every message.<span aria-hidden="true">+</span></summary><p>A moderator chooses what becomes memory. A busy channel, a joke, and an unreviewed suggestion stay conversation.</p></details><details data-reveal><summary>Changed rules need changed knowledge.<span aria-hidden="true">+</span></summary><p>Edit or remove the saved guidance. Future questions use the current facts. The bot does not broadcast corrections into old threads.</p></details><details data-reveal><summary>The model can still get things wrong.<span aria-hidden="true">+</span></summary><p>Replies include their source so a person can check them. Unsupported questions wait. An account or payment issue needs private human support.</p></details><details data-reveal><summary>You run the bot and choose the model.<span aria-hidden="true">+</span></summary><p>Use local Ollama inference, or Paper Instruments for replies with local embeddings. You also choose the database, support channels, and moderators.</p></details></div></section>
+
+  <section class="project-note wrap" data-reveal><p class="section-index">03 / Why I made it</p><p class="project-note__text">I kept seeing the same questions in a community Discord. The answer was usually already somewhere in the server. Finding it was the work.</p><p class="project-note__after">ThreadSherpa is my small Hacktoberfest project to skip that repeated work. Someone still gives the first good answer. The bot helps it get found again.</p></section>
+
+  <section class="setup-section" id="use"><div class="wrap setup-section__inner"><div class="setup-section__copy" data-reveal><p class="section-index">04 / Run it</p><h2>Put it in your<br />support channel.</h2><p>A Discord bot token. MongoDB.<br />Ollama or a Paper Instruments key.</p><a class="setup-link" href="/setup/"><span>Setup instructions</span><span class="setup-link__arrow"><img src="/icons/arrow-right-up-linear.svg" width="22" height="22" alt="" /></span></a></div><div class="setup-steps" data-reveal><div><span>01</span><p>Create your Discord application.</p></div><div><span>02</span><p>Add the environment values and start the bot.</p></div><div><span>03</span><p>Connect a forum. Save the first useful reply.</p></div><div class="source-links"><a href="https://github.com/sea-deep/threadsherpa" target="_blank" rel="noopener noreferrer">GitHub <img src="/icons/arrow-right-up-linear.svg" width="14" height="14" alt="" /></a><a href="https://gitlab.com/wdipak/threadsherpa" target="_blank" rel="noopener noreferrer">GitLab <img src="/icons/arrow-right-up-linear.svg" width="14" height="14" alt="" /></a><a href="https://github.com/sea-deep/threadsherpa/blob/main/docs/START_HERE.md" target="_blank" rel="noopener noreferrer">Quick start <img src="/icons/arrow-right-up-linear.svg" width="14" height="14" alt="" /></a></div></div></div></section>
+  <script type="application/json" data-architecture-data set:html={JSON.stringify(steps)} />
+  <script>import '../scripts/afterlife';</script>
+</Base>

@@ -1,4 +1,5 @@
 import dns from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { logger } from '../utils/logger.js';
 
 export interface SsrfValidationResult {
@@ -16,22 +17,24 @@ const BLOCKED_HOSTNAMES = new Set([
   'metadata.google.internal',
 ]);
 
-export function isPrivateIp(ip: string): boolean {
-  // IPv4 private ranges
-  // 10.0.0.0 - 10.255.255.255
-  if (/^10\./.test(ip)) return true;
-  // 172.16.0.0 - 172.31.255.255
-  if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip)) return true;
-  // 192.168.0.0 - 192.168.255.255
-  if (/^192\.168\./.test(ip)) return true;
-  // 127.0.0.0/8 loopback
-  if (/^127\./.test(ip)) return true;
-  // 169.254.0.0/16 link-local
-  if (/^169\.254\./.test(ip)) return true;
-  // IPv6 loopback and private
-  if (ip === '::1' || ip === 'fe80::' || ip.startsWith('fc00:') || ip.startsWith('fd00:')) return true;
-
-  return false;
+export function isPrivateIp(address: string): boolean {
+  const ip = address.replace(/^\[|\]$/g, '').toLowerCase();
+  if (isIP(ip) === 4) {
+    const [a, b] = ip.split('.').map(Number);
+    return a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) || (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) || (a === 192 && (b === 168 || b === 0));
+  }
+  if (isIP(ip) === 6) {
+    const normalized = new URL(`http://[${ip}]/`).hostname.slice(1, -1);
+    const mapped = normalized.match(/^::ffff:([a-f0-9]+):([a-f0-9]+)$/);
+    if (mapped) {
+      const high = parseInt(mapped[1], 16), low = parseInt(mapped[2], 16);
+      return isPrivateIp(`${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`);
+    }
+    return normalized.startsWith('::') || /^(f[cd]|fe[89ab]|ff)/.test(normalized);
+  }
+  return true; // An unrecognized DNS answer cannot authorize a network request.
 }
 
 export async function validateUrl(urlStr: string, allowedDomains: string[] = []): Promise<SsrfValidationResult> {
@@ -47,10 +50,11 @@ export async function validateUrl(urlStr: string, allowedDomains: string[] = [])
     return { safe: false, reason: `Unsupported protocol: ${parsed.protocol}` };
   }
 
-  const hostname = parsed.hostname.toLowerCase();
+  if (parsed.username || parsed.password) return { safe: false, reason: 'URL credentials are blocked' };
+  const hostname = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
 
   // Check explicit blocked hostnames
-  if (BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith('.local') || hostname.endsWith('.internal')) {
+  if ((isIP(hostname) && isPrivateIp(hostname)) || BLOCKED_HOSTNAMES.has(hostname) || hostname.endsWith('.local') || hostname.endsWith('.internal')) {
     return { safe: false, reason: `Access to internal host '${hostname}' is blocked` };
   }
 
@@ -67,10 +71,10 @@ export async function validateUrl(urlStr: string, allowedDomains: string[] = [])
 
   // Resolve DNS to verify it doesn't resolve to a private IP (mitigate DNS rebinding)
   try {
-    const lookup = await dns.lookup(hostname);
-    if (isPrivateIp(lookup.address)) {
-      logger.warn({ hostname, resolvedIp: lookup.address }, 'SSRF guard blocked access to resolved private IP');
-      return { safe: false, reason: `Host resolves to private IP address: ${lookup.address}` };
+    const lookups = await dns.lookup(hostname, { all: true });
+    if (!lookups.length || lookups.some(lookup => isPrivateIp(lookup.address))) {
+      logger.warn({ hostname }, 'SSRF guard blocked access to resolved private IP');
+      return { safe: false, reason: 'Host resolves to a blocked IP address' };
     }
   } catch (err) {
     return { safe: false, reason: `Failed to resolve host: ${err instanceof Error ? err.message : String(err)}` };

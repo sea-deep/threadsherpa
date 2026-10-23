@@ -18,12 +18,14 @@ export interface KnowledgeItem {
   guild_id: string;
   current_version: number;
   question_patterns: string[];
+  question_context?: string | null;
   canonical_answer: string;
   applies_when?: string | null;
   does_not_apply_when?: string | null;
   authority: KnowledgeAuthority;
   approval_status: KnowledgeStatus;
   source_refs: string[];
+  origin_case_id?: string | null;
   embedding?: number[] | null;
   created_by: string;
   created_at: string;
@@ -38,6 +40,7 @@ export interface KnowledgeVersion {
   version: number;
   canonical_answer: string;
   question_patterns: string[];
+  question_context?: string | null;
   applies_when?: string | null;
   does_not_apply_when?: string | null;
   change_reason?: string | null;

@@ -1,0 +1,10 @@
+{
+  "verifiedAt": "2026-10-23T10:48:07.662Z",
+  "checks": [
+    "Five scroll steps: question, explicit save, sourced reply, follow-up, unsupported question with no bot reply.",
+    "Architecture: selectable nodes, code links, quiet route and skipped generation.",
+    "Details and motion controls work; pausing leaves the full conversation readable.",
+    "Viewport stays within 320px, 390px and 768px.",
+    "System reduced motion disables pinned flow and canvas."
+  ]
+}

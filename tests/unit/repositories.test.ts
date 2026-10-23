@@ -5,8 +5,6 @@ import { GuildConfigRepository } from '../../src/database/repositories/guild-con
 import { CaseRepository } from '../../src/database/repositories/case.repo.js';
 import { EvidenceRepository } from '../../src/database/repositories/evidence.repo.js';
 import { KnowledgeRepository } from '../../src/database/repositories/knowledge.repo.js';
-import { IncidentRepository } from '../../src/database/repositories/incident.repo.js';
-import { GitHubRepository } from '../../src/database/repositories/github.repo.js';
 import { AuditRepository } from '../../src/database/repositories/audit.repo.js';
 
 describe('Data Repositories & State Machine (MongoDB)', () => {
@@ -15,8 +13,6 @@ describe('Data Repositories & State Machine (MongoDB)', () => {
   let caseRepo: CaseRepository;
   let evidenceRepo: EvidenceRepository;
   let knowledgeRepo: KnowledgeRepository;
-  let incidentRepo: IncidentRepository;
-  let githubRepo: GitHubRepository;
   let auditRepo: AuditRepository;
 
   beforeEach(async () => {
@@ -27,8 +23,6 @@ describe('Data Repositories & State Machine (MongoDB)', () => {
     caseRepo = new CaseRepository(db);
     evidenceRepo = new EvidenceRepository(db);
     knowledgeRepo = new KnowledgeRepository(db);
-    incidentRepo = new IncidentRepository(db);
-    githubRepo = new GitHubRepository(db);
     auditRepo = new AuditRepository(db);
 
     // Setup test guild
@@ -212,69 +206,4 @@ describe('Data Repositories & State Machine (MongoDB)', () => {
     });
   });
 
-  describe('Incidents and GitHub Linkages', () => {
-    beforeEach(async () => {
-      // Ensure test cases exist
-      await caseRepo.create({
-        case_id: 'case_inc_1',
-        guild_id: 'guild_123',
-        channel_id: 'chan_support',
-        message_id: 'msg_inc_1',
-        requester_id: 'user_1',
-        requester_username: 'alice',
-        category: 'points',
-        title: 'Points missing',
-        status: 'new',
-      });
-      await caseRepo.create({
-        case_id: 'case_inc_2',
-        guild_id: 'guild_123',
-        channel_id: 'chan_support',
-        message_id: 'msg_inc_2',
-        requester_id: 'user_2',
-        requester_username: 'bob',
-        category: 'points',
-        title: 'Points not updated',
-        status: 'new',
-      });
-    });
-
-    it('creates shared incident, links cases, and updates verification', async () => {
-      const inc = await incidentRepo.create({
-        incident_id: 'inc_01',
-        guild_id: 'guild_123',
-        title: 'Points not synchronizing after DEV challenge submission',
-        symptom_cluster: 'points_sync_failure_error_503',
-        verification_state: 'suspected',
-      });
-
-      await incidentRepo.linkCase('inc_01', 'case_inc_1');
-      await incidentRepo.linkCase('inc_01', 'case_inc_2');
-
-      const updatedInc = await incidentRepo.get('inc_01');
-      expect(updatedInc?.affected_case_count).toBe(2);
-
-      await incidentRepo.updateVerification('inc_01', 'confirmed', 'Backend webhook backlog');
-      const confirmed = await incidentRepo.get('inc_01');
-      expect(confirmed?.verification_state).toBe('confirmed');
-    });
-
-    it('creates and tracks GitHub issue drafts', async () => {
-      const draft = await githubRepo.createDraft({
-        link_id: 'link_01',
-        case_id: 'case_inc_1',
-        repo_owner: 'sea-deep',
-        repo_name: 'threadsherpa',
-        draft_title: 'Bug: SQLite native bindings crash on Node 26',
-        draft_body: '## Description\nNative bindings failed to compile...',
-        created_by: 'copilot',
-      });
-
-      expect(draft.status).toBe('draft');
-
-      const created = await githubRepo.markCreated('link_01', 42, 'https://github.com/sea-deep/threadsherpa/issues/42', 'admin_1');
-      expect(created?.status).toBe('created');
-      expect(created?.issue_number).toBe(42);
-    });
-  });
 });

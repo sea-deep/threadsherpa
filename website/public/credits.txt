@@ -1,0 +1,18 @@
+ThreadSherpa website credits
+
+Solar icons by 480 Design, via Iconify. CC BY 4.0.
+https://github.com/480-Design/Solar-Icon-Set
+https://creativecommons.org/licenses/by/4.0/
+Icon colors were adapted for this website.
+
+Discord Components by Skyra, MIT license.
+https://github.com/skyra-project/discord-components
+
+Uncut Sans by Kasper Nordkvist, SIL Open Font License.
+https://github.com/kaspernordkvist/uncut_sans
+Font licenses are provided in /fonts/.
+
+Scene portraits from Unsplash, under the Unsplash License.
+https://unsplash.com/license
+
+Discord captures show the working ThreadSherpa bot in the author's server.

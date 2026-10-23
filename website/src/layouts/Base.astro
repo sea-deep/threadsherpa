@@ -1,0 +1,83 @@
+---
+import '../styles/tokens.css';
+import '../styles/global.css';
+import '../styles/pages.css';
+import '../styles/afterlife.css';
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = 'ThreadSherpa | Discord answers that keep helping',
+  description = "Save a moderator's answer once. ThreadSherpa uses those facts to write short, sourced replies for the next Discord question. Open source and self-hosted.",
+} = Astro.props;
+
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'ThreadSherpa',
+  applicationCategory: 'DeveloperApplication',
+  operatingSystem: 'macOS, Linux, Windows',
+  description,
+  license: 'https://www.apache.org/licenses/LICENSE-2.0',
+  isAccessibleForFree: true,
+};
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#100F15" />
+
+    <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/brand/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="/brand/apple-touch-icon-180.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ThreadSherpa" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content="/brand/social-card-1280x630.png" />
+    <meta property="og:image:width" content="1280" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ThreadSherpa. A Discord bot for repeat questions." />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+    <meta name="twitter:image" content="/brand/social-card-1280x630.png" />
+
+    <link rel="preload" href="/fonts/uncut-variable.woff2" as="font" type="font/woff2" crossorigin />
+    <script is:inline>
+      try {
+        if (localStorage.getItem('ts-motion') === 'paused') {
+          document.documentElement.classList.add('motion-paused');
+        }
+      } catch (error) {
+        /* Storage can be unavailable. Motion stays on unless the OS asks otherwise. */
+      }
+    </script>
+
+    <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <Header />
+    <main id="main">
+      <slot />
+    </main>
+    <Footer />
+
+    <script>
+      import '../scripts/site';
+    </script>
+  </body>
+</html>

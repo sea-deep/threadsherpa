@@ -1,11 +1,9 @@
+import { randomUUID } from 'node:crypto';
 import {
-  ChatInputCommandInteraction,
-  ButtonInteraction,
-  Message,
-  ThreadChannel,
-  ChannelType,
-  PermissionFlagsBits,
-  GuildMember,
+  ChatInputCommandInteraction, ButtonInteraction, MessageContextMenuCommandInteraction,
+  ModalSubmitInteraction, StringSelectMenuInteraction, Message, ThreadChannel, ChannelType,
+  PermissionFlagsBits, GuildMember, ModalBuilder, TextInputBuilder, TextInputStyle,
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, EmbedBuilder,
 } from 'discord.js';
 import { GuildConfigRepository } from '../../database/repositories/guild-config.repo.js';
 import { CaseRepository } from '../../database/repositories/case.repo.js';
@@ -13,628 +11,389 @@ import { EvidenceRepository } from '../../database/repositories/evidence.repo.js
 import { KnowledgeRepository } from '../../database/repositories/knowledge.repo.js';
 import { AgentOrchestrator } from '../../agent/orchestrator.js';
 import { LearningPipeline } from '../../memory/learner.js';
-import { GitHubCopilot } from '../../agent/github-copilot.js';
-import { IncidentDetector } from '../../agent/incident-detector.js';
-import {
-  buildCaseEmbed,
-  buildCandidateReviewCard,
-  buildIssueDraftCard,
-  buildIncidentCard,
-} from '../ui/embeds.js';
-import { logger } from '../../utils/logger.js';
+
+import { KnowledgeItem } from '../../domain/knowledge.js';
+import { SupportCase } from '../../domain/case.js';
+import { answerFeedback } from '../../support/conversation.js';
+import { groupWaitingQuestions } from '../../support/queue.js';
+import { buildCaseEmbed, buildCaseActions } from '../ui/embeds.js';
+
+type Interaction = ChatInputCommandInteraction | ButtonInteraction | MessageContextMenuCommandInteraction | ModalSubmitInteraction | StringSelectMenuInteraction;
+const id = () => `case_${randomUUID()}`;
+const questionUrl = (c: SupportCase) => `https://discord.com/channels/${c.guild_id}/${c.thread_id || c.channel_id}/${c.message_id}`;
+const safeText = (text: string) => text.replace(/[\[\]<>*_`]/g, '');
 
 export class BotInteractionRouter {
-  constructor(
-    private guildRepo: GuildConfigRepository,
-    private caseRepo: CaseRepository,
-    private evidenceRepo: EvidenceRepository,
-    private knowledgeRepo: KnowledgeRepository,
-    private orchestrator: AgentOrchestrator,
-    private learningPipeline: LearningPipeline,
-    private githubCopilot: GitHubCopilot,
-    private incidentDetector: IncidentDetector
-  ) {}
+  private pendingThreads = new Set<string>();
+  constructor(private guildRepo: GuildConfigRepository, private caseRepo: CaseRepository,
+    private evidenceRepo: EvidenceRepository, private knowledgeRepo: KnowledgeRepository,
+    private orchestrator: AgentOrchestrator, private learningPipeline: LearningPipeline) {}
 
-  private async isAuthorizedAdmin(interaction: ChatInputCommandInteraction | ButtonInteraction): Promise<boolean> {
+  private async isAuthorizedAdmin(interaction: Interaction): Promise<boolean> {
     const member = interaction.member as GuildMember | null;
     if (!member) return false;
-    if (member.permissions && typeof member.permissions.has === 'function' && member.permissions.has(PermissionFlagsBits.Administrator)) {
-      return true;
-    }
-
-    const roleIds = member.roles?.cache
-      ? Array.from(member.roles.cache.values()).map((r: any) => r.id || r)
-      : [];
-    return await this.guildRepo.isAdmin(interaction.guildId || '', roleIds);
+    if (member.permissions && typeof member.permissions.has === 'function' && member.permissions.has(PermissionFlagsBits.Administrator)) return true;
+    if (interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) return true;
+    const roles = Array.isArray(member.roles) ? member.roles : member.roles?.cache ? [...member.roles.cache.keys()] : [];
+    return this.guildRepo.isAdmin(interaction.guildId || '', roles);
+  }
+  private async moderatorOnly(i: Interaction): Promise<boolean> {
+    if (await this.isAuthorizedAdmin(i)) return true;
+    await i.reply({ content: 'Moderators only.', ephemeral: true });
+    return false;
+  }
+  private async card(caseId: string) {
+    const c = (await this.caseRepo.get(caseId))!;
+    return { embeds: [buildCaseEmbed(c, await this.evidenceRepo.getByCaseId(caseId))], components: buildCaseActions(c) };
   }
 
-  async handleCommand(interaction: ChatInputCommandInteraction): Promise<void> {
-    const guildId = interaction.guildId;
-    if (!guildId) {
-      await interaction.reply({ content: 'ThreadSherpa commands can only be executed inside a Discord server.', ephemeral: true });
-      return;
-    }
-
-    const { commandName } = interaction;
-    logger.info({ commandName, guildId, user: interaction.user.tag }, 'Received slash command');
-
-    switch (commandName) {
-      case 'setup':
-        await this.handleSetup(interaction);
-        break;
-      case 'ask':
-        await this.handleAsk(interaction);
-        break;
-      case 'case':
-        await this.handleCase(interaction);
-        break;
-      case 'teach':
-        await this.handleTeach(interaction);
-        break;
-      case 'memory':
-        await this.handleMemory(interaction);
-        break;
-      case 'issue':
-        await this.handleIssue(interaction);
-        break;
-      case 'sources':
-        await this.handleSources(interaction);
-        break;
-      default:
-        await interaction.reply({ content: `Unknown command: ${commandName}`, ephemeral: true });
-    }
-  }
-
-  private async handleSetup(interaction: ChatInputCommandInteraction): Promise<void> {
-    if (!(await this.isAuthorizedAdmin(interaction))) {
-      await interaction.reply({ content: '❌ You do not have permission to configure ThreadSherpa. Requires Server Administrator or authorized role.', ephemeral: true });
-      return;
-    }
-
-    const guildId = interaction.guildId!;
-    const channel = interaction.options.getChannel('channel');
-    const removeChannel = interaction.options.getChannel('remove_channel');
-    const adminRole = interaction.options.getRole('admin_role');
-    const allowedDomain = interaction.options.getString('allowed_domain');
-    const repo = interaction.options.getString('repo');
-    const autonomyMode = interaction.options.getString('autonomy_mode') as 'observe' | 'supervised' | 'auto' | null;
-
-    const currentConfig = await this.guildRepo.get(guildId);
-    const supportChannels = new Set(currentConfig?.support_channel_ids || []);
-    const adminRoles = new Set(currentConfig?.admin_role_ids || []);
-    const allowedDomains = new Set(currentConfig?.allowed_domains || []);
-    const connectedRepos = new Set(currentConfig?.connected_repos || []);
-
-    if (channel) supportChannels.add(channel.id);
-    if (removeChannel) supportChannels.delete(removeChannel.id);
-    if (adminRole) adminRoles.add(adminRole.id);
-    if (allowedDomain) allowedDomains.add(allowedDomain.toLowerCase().trim());
-    if (repo) connectedRepos.add(repo.trim());
-
-    const updated = await this.guildRepo.upsert({
-      guild_id: guildId,
-      autonomy_mode: autonomyMode || currentConfig?.autonomy_mode || 'supervised',
-      support_channel_ids: Array.from(supportChannels),
-      admin_role_ids: Array.from(adminRoles),
-      allowed_domains: Array.from(allowedDomains),
-      connected_repos: Array.from(connectedRepos),
-    });
-
-    const isConfigured = updated.support_channel_ids.length > 0;
-    const setupNotice = isConfigured
-      ? '✅ **ThreadSherpa Active**: Monitoring configured support channels, forum channels, and threads.'
-      : '⚠️ **Setup Incomplete**: No support channels designated. Add a channel with `/setup channel: #channel` before automatic scanning begins.';
-
-    const summary = [
-      '### ⚙️ ThreadSherpa Server Configuration',
-      setupNotice,
-      `• **Autonomy Mode**: \`${updated.autonomy_mode}\``,
-      `• **Monitored Support Channels**: ${updated.support_channel_ids.map(id => `<#${id}>`).join(', ') || '*None*' }`,
-      `• **Admin Roles**: ${updated.admin_role_ids.map(id => `<@&${id}>`).join(', ') || '*Server Admins only*' }`,
-      `• **Allowed Doc Domains**: ${updated.allowed_domains.map(d => `\`${d}\``).join(', ') || '*None*' }`,
-      `• **Connected Repositories**: ${updated.connected_repos.map(r => `\`${r}\``).join(', ') || '*None*' }`,
-    ].join('\n');
-
-    await interaction.reply({ content: summary, ephemeral: true });
-  }
-
-  private async handleAsk(interaction: ChatInputCommandInteraction): Promise<void> {
-    const question = interaction.options.getString('question', true);
-    const guildId = interaction.guildId!;
-
-    // Defer reply immediately to satisfy Discord's 3-second deadline
-    await interaction.deferReply();
-
-    const caseId = `case_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const newCase = await this.caseRepo.create({
-      case_id: caseId,
-      guild_id: guildId,
-      channel_id: interaction.channelId,
-      message_id: interaction.id,
-      requester_id: interaction.user.id,
-      requester_username: interaction.user.username,
-      category: 'general',
-      title: question,
-      status: 'new',
-      summary: question,
-    });
-
-    // Check for potential shared incident
-    const clusterResult = await this.incidentDetector.detectCluster(newCase);
-
-    // Run investigation
-    await this.orchestrator.investigateCase(caseId);
-    const updatedCase = (await this.caseRepo.get(caseId))!;
-    const evidence = await this.evidenceRepo.getByCaseId(caseId);
-
-    const embed = buildCaseEmbed(updatedCase, evidence);
-    await interaction.editReply({ embeds: [embed] });
-
-    // If an incident cluster was identified, notify
-    if (clusterResult.clusterFound && clusterResult.incident && clusterResult.isNewIncident) {
-      const card = buildIncidentCard(clusterResult.incident);
-      await interaction.followUp({ embeds: [card.embed], components: [card.row] });
-    }
-  }
-
-  private async handleCase(interaction: ChatInputCommandInteraction): Promise<void> {
-    const caseIdOption = interaction.options.getString('case_id');
-    const updateContext = interaction.options.getString('update_context');
-    const action = interaction.options.getString('action');
-
-    const isThread = interaction.channel?.isThread();
-    const parentId = isThread ? interaction.channel.parentId : null;
-    const threadId = isThread ? interaction.channelId : undefined;
-
-    const activeFound = await this.caseRepo.findActiveCase(parentId || interaction.channelId, threadId);
-    const caseId = caseIdOption || activeFound?.case_id;
-
-    if (!caseId) {
-      await interaction.reply({ content: 'No active support case found in this channel or thread. Specify a `case_id`.', ephemeral: true });
-      return;
-    }
-
-    let c = await this.caseRepo.get(caseId);
-    if (!c || c.guild_id !== interaction.guildId) {
-      await interaction.reply({ content: `Case \`${caseId}\` not found.`, ephemeral: true });
-      return;
-    }
-
-    // 1. If context update provided, update case summary and record evidence
-    if (updateContext && updateContext.trim().length > 0) {
-      const author = interaction.user.username;
-      const note = `[Context Update from @${author}]: ${updateContext.trim()}`;
-      const updatedSummary = `${c.summary || c.title}\n\n${note}`.slice(0, 3000);
-      c = (await this.caseRepo.updateSummary(caseId, updatedSummary))!;
-
-      await this.evidenceRepo.add({
-        evidence_id: `ev_ctx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        case_id: caseId,
-        source_type: 'discord_message',
-        source_url: `discord://interaction/${interaction.id}`,
-        title: `Manual Context Update by ${author}`,
-        excerpt: updateContext.trim().slice(0, 500),
-        authority_score: 0.8,
-        metadata: { subtype: 'user_context', updated_by: author },
-      });
-    }
-
-    // 2. Perform requested action
-    if (action === 'resolve') {
-      c = (await this.caseRepo.updateStatus(caseId, 'resolved', 'Marked resolved via /case'))!;
-    } else if (action === 'close') {
-      c = (await this.caseRepo.updateStatus(caseId, 'closed', 'Closed via /case'))!;
-    } else if (action === 'reinvestigate') {
-      if (typeof interaction.deferReply === 'function') {
-        await interaction.deferReply();
+  async handleCommand(i: ChatInputCommandInteraction): Promise<void> {
+    if (!i.guildId) { await i.reply({ content: 'Use this in a server.', ephemeral: true }); return; }
+    switch (i.commandName) {
+      case 'setup': return this.handleSetup(i);
+      case 'ask': {
+        await i.deferReply();
+        const question = i.options.getString('question', true);
+        const reply = await i.fetchReply();
+        const thread = i.channel?.isThread() ? i.channel : null;
+        const c = await this.caseRepo.create({ case_id: id(), guild_id: i.guildId, channel_id: thread?.parentId || i.channelId,
+          thread_id: thread?.id, message_id: reply.id, requester_id: i.user.id, requester_username: i.user.username,
+          category: 'question', title: question, summary: question, status: 'new' });
+        await this.orchestrator.investigateCase(c.case_id);
+        await i.editReply(await this.card(c.case_id)); return;
       }
-      await this.orchestrator.investigateCase(caseId);
-      c = (await this.caseRepo.get(caseId))!;
-      const evidence = await this.evidenceRepo.getByCaseId(caseId);
-      const embed = buildCaseEmbed(c, evidence);
-      if (typeof interaction.editReply === 'function') {
-        await interaction.editReply({
-          content: updateContext ? '📝 **Case Context Updated & Re-investigated**' : '🔄 **Case Re-investigated**',
-          embeds: [embed],
-        });
-      }
-      return;
-    }
-
-    const evidence = await this.evidenceRepo.getByCaseId(caseId);
-    const embed = buildCaseEmbed(c, evidence);
-    await interaction.reply({
-      content: updateContext ? '📝 **Case Context Successfully Updated**' : undefined,
-      embeds: [embed],
-    });
-  }
-
-  private async handleTeach(interaction: ChatInputCommandInteraction): Promise<void> {
-    if (!(await this.isAuthorizedAdmin(interaction))) {
-      await interaction.reply({ content: '❌ You must be an authorized support administrator to teach ThreadSherpa.', ephemeral: true });
-      return;
-    }
-
-    const question = interaction.options.getString('question', true);
-    const solution = interaction.options.getString('solution', true);
-
-    await interaction.deferReply({ ephemeral: true });
-
-    const result = await this.learningPipeline.proposeFromAdminMessage({
-      guildId: interaction.guildId!,
-      channelId: interaction.channelId,
-      adminUserId: interaction.user.id,
-      adminMessage: solution,
-      caseContext: { originalQuestion: question },
-    });
-
-    const card = buildCandidateReviewCard(result.candidate, result.conflictingItems);
-    await interaction.editReply({
-      content: '✅ Extracted structured knowledge candidate. Confirm review below:',
-      embeds: [card.embed],
-      components: [card.row],
-    });
-  }
-
-  private async handleMemory(interaction: ChatInputCommandInteraction): Promise<void> {
-    const subcommand = interaction.options.getSubcommand();
-    const guildId = interaction.guildId!;
-
-    if (subcommand === 'search') {
-      const query = interaction.options.getString('query', true);
-      await interaction.deferReply();
-      const results = await this.knowledgeRepo.searchLexical(guildId, query, 5);
-
-      if (results.length === 0) {
-        await interaction.editReply({ content: `No approved knowledge found matching "${query}".` });
+      case 'teach': return this.handleTeach(i);
+      case 'answers': return this.handleAnswers(i);
+      case 'queue': {
+        if (!(await this.moderatorOnly(i))) return;
+        await i.deferReply({ ephemeral: true });
+        const visible = await this.visibleWaiting(i);
+        if (!visible.length) {
+          await i.editReply({ content: 'Nothing waiting.' }); return;
+        }
+        const groups = groupWaitingQuestions(visible);
+        const repeated = groups.some(group => group.cases.length > 1);
+        const menu = new StringSelectMenuBuilder().setCustomId(repeated ? 'open_queue_topic' : 'open_queue').setPlaceholder(repeated ? 'Choose an issue' : 'Open a question')
+          .addOptions(groups.slice(0, 25).map(group => ({ label: group.question.title.slice(0, 80) + (group.cases.length > 1 ? ` · ${group.cases.length} questions` : ''), value: group.question.case_id })));
+        await i.editReply({ content: `${visible.length}${visible.length === 50 ? '+' : ''} questions${repeated ? ` · ${groups.length} topic${groups.length === 1 ? '' : 's'}` : ''} need help.`,
+          components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)] });
         return;
       }
-
-      const list = results.map((item, idx) => `**${idx + 1}. [v${item.current_version}] ${item.question_patterns[0]}**\n> ${item.canonical_answer.slice(0, 200)}...\n*ID: \`${item.knowledge_id}\`*`).join('\n\n');
-      await interaction.editReply({ content: `### 🧠 Memory Search Results for "${query}"\n\n${list}` });
-    } else if (subcommand === 'list') {
-      const items = await this.knowledgeRepo.getApproved(guildId);
-      if (items.length === 0) {
-        await interaction.reply({ content: 'No approved knowledge items stored yet. Teach the bot with `/teach` or resolve cases!', ephemeral: true });
-        return;
+      case 'stats': {
+        const s = await this.caseRepo.getImpact(i.guildId);
+        await i.reply({ content: `${s.questions} questions · ${s.solved} solved · ${s.handoffs} need help`, ephemeral: true }); return;
       }
-
-      const list = items.slice(0, 8).map(item => `• **${item.question_patterns[0]}** (v${item.current_version})\n  *Answer*: ${item.canonical_answer.slice(0, 100)}... (\`${item.knowledge_id}\`)`).join('\n');
-      await interaction.reply({ content: `### 📚 Approved Knowledge Items (${items.length} total)\n\n${list}`, ephemeral: true });
-    } else if (subcommand === 'pending') {
-      const pending = await this.knowledgeRepo.getPendingCandidates(guildId);
-      if (pending.length === 0) {
-        await interaction.reply({ content: 'No pending knowledge candidates awaiting review.', ephemeral: true });
-        return;
-      }
-
-      const list = pending.map(p => `• **${p.knowledge_id}**: "${p.question_patterns[0]}"\n  *Proposed Answer*: ${p.canonical_answer.slice(0, 100)}...`).join('\n');
-      await interaction.reply({ content: `### ⏳ Pending Knowledge Candidates (${pending.length})\n\n${list}`, ephemeral: true });
-    } else if (subcommand === 'delete') {
-      if (!(await this.isAuthorizedAdmin(interaction))) {
-        await interaction.reply({ content: '❌ Only administrators can delete knowledge items.', ephemeral: true });
-        return;
-      }
-      const knowledgeId = interaction.options.getString('knowledge_id', true);
-      const deleted = await this.knowledgeRepo.delete(knowledgeId);
-      if (deleted) {
-        await interaction.reply({ content: `✅ Knowledge item \`${knowledgeId}\` has been marked deleted and purged from active search indexes.`, ephemeral: true });
-      } else {
-        await interaction.reply({ content: `Knowledge item \`${knowledgeId}\` not found.`, ephemeral: true });
+      case 'sources': {
+        const config = await this.guildRepo.get(i.guildId);
+        await i.reply({ content: config?.documentation_urls.length ? config.documentation_urls.map(u => `<${u}>`).join('\n') : 'No sources yet. Add one with /setup source_url.', ephemeral: true }); return;
       }
     }
   }
 
-  private async handleIssue(interaction: ChatInputCommandInteraction): Promise<void> {
-    const caseIdOption = interaction.options.getString('case_id');
-    const activeCase = await this.caseRepo.findActiveCase(interaction.channelId);
-    const caseId = caseIdOption || activeCase?.case_id;
-
-    if (!caseId) {
-      await interaction.reply({ content: 'No active support case found in this channel. Specify a `case_id`.', ephemeral: true });
-      return;
+  private async handleSetup(i: ChatInputCommandInteraction) {
+    if (!(await this.moderatorOnly(i))) return;
+    const guildId = i.guildId!;
+    let channel: { id: string } | null = i.options.getChannel('channel');
+    const remove = i.options.getChannel('remove_channel');
+    const role = i.options.getRole('admin_role');
+    const source = i.options.getString('source_url');
+    const mode = i.options.getString('autonomy_mode') as 'observe' | 'supervised' | 'auto' | null;
+    const current = await this.guildRepo.get(guildId);
+    const urls = new Set(current?.documentation_urls || []);
+    const domains = new Set(current?.allowed_domains || []);
+    if (source) {
+      let url: URL;
+      try { url = new URL(source); if (url.protocol !== 'https:' || url.username || url.password) throw new Error(); }
+      catch { await i.reply({ content: 'Use an https documentation link.', ephemeral: true }); return; }
+      if (urls.size >= 3 && !urls.has(source)) { await i.reply({ content: 'Three sources maximum.', ephemeral: true }); return; }
+      urls.add(source); domains.add(url.hostname);
     }
+    if (!channel && !remove && !role && !source && !current?.support_channel_ids.length) {
+      if (i.channel?.isThread() && i.channel.parentId) channel = { id: i.channel.parentId };
+      else if (i.channel && [ChannelType.GuildText, ChannelType.GuildAnnouncement].includes(i.channel.type)) channel = { id: i.channelId };
+    }
+    const channels = new Set(current?.support_channel_ids || []);
+    const roles = new Set(current?.admin_role_ids || []);
+    if (channel) channels.add(channel.id);
+    if (remove) channels.delete(remove.id);
+    if (role) roles.add(role.id);
+    const updated = await this.guildRepo.upsert({ guild_id: guildId, support_channel_ids: [...channels], admin_role_ids: [...roles],
+      documentation_urls: [...urls], allowed_domains: [...domains], autonomy_mode: mode || current?.autonomy_mode || 'supervised' });
+    await i.reply({ content: updated.support_channel_ids.length
+      ? `${updated.support_channel_ids.map(c => `<#${c}>`).join(', ')} · ${updated.autonomy_mode === 'auto' ? 'Auto replies on' : updated.autonomy_mode === 'observe' ? 'Quiet mode' : 'Reply with /ask'}.`
+      : 'Choose a support channel: /setup channel:#your-forum autonomy_mode:auto', ephemeral: true });
+  }
 
-    await interaction.deferReply();
+  private async handleTeach(i: ChatInputCommandInteraction) {
+    if (!(await this.moderatorOnly(i))) return;
+    const solution = i.options.getString('solution', true);
+    const source = i.options.getString('source_url') || undefined;
+    if (solution.length > 3500 || (source && !/^https:\/\//i.test(source))) {
+      await i.reply({ content: 'Use an answer of up to 3,500 characters and an https source link.', ephemeral: true }); return;
+    }
+    await i.deferReply({ ephemeral: true });
+    const days = i.options.getInteger?.('valid_days');
+    const result = await this.learningPipeline.saveAnswer({ guildId: i.guildId!, channelId: i.channelId,
+      adminUserId: i.user.id, adminMessage: solution, sourceUrl: source, appliesWhen: i.options.getString('applies_when') || undefined,
+      expiresAt: days ? new Date(Date.now() + days * 86400000).toISOString() : null,
+      caseContext: { originalQuestion: i.options.getString('question', true) } });
+    await i.editReply({ content: result.status === 'exists' ? 'Already saved.' : 'Saved.' });
+  }
 
+  async handleContextMenu(i: MessageContextMenuCommandInteraction): Promise<void> {
+    if (!i.guildId || i.commandName !== 'Save this answer' || !(await this.moderatorOnly(i))) return;
+    const message = i.targetMessage;
+    if (message.author.bot || !message.content.trim() || message.content.length > 3500) {
+      await i.reply({ content: 'Choose a human answer (up to 3,500 characters).', ephemeral: true }); return;
+    }
+    const thread = i.channel?.isThread() ? i.channel : null;
+    if (!(await this.guildRepo.isSupportChannel(i.guildId, i.channelId, thread?.parentId))) {
+      await i.reply({ content: 'Choose an answer in a configured support channel or forum post.', ephemeral: true }); return;
+    }
+    await i.deferReply({ ephemeral: true });
+    let c = thread ? await this.caseRepo.getByThreadId(thread.id) : null;
+    if (thread && !c) {
+      const starter = await thread.fetchStarterMessage().catch(() => null);
+      if (starter && starter.id !== message.id && !starter.author.bot) {
+        c = await this.caseRepo.create({ case_id: id(), guild_id: i.guildId, channel_id: thread.parentId || thread.id,
+          thread_id: thread.id, message_id: starter.id, requester_id: starter.author.id, requester_username: starter.author.username,
+          category: 'question', title: thread.name, summary: starter.content, status: 'awaiting_admin' });
+      }
+    }
+    if (!c && message.reference?.messageId) c = await this.caseRepo.getByMessageId(message.reference.messageId);
+    if (!c || c.guild_id !== i.guildId || c.message_id === message.id) {
+      await i.editReply({ content: 'Question unclear. Use /teach question:… solution:…' }); return;
+    }
+    const result = await this.learningPipeline.saveAnswer({ guildId: i.guildId, channelId: i.channelId,
+      adminUserId: i.user.id, adminMessage: message.content, sourceUrl: message.url, originCaseId: c.case_id,
+      caseContext: { originalQuestion: c.title.slice(0, 200), originalContext: [c.title, c.summary].filter(Boolean).join('\n') } });
+    await this.caseRepo.markAnsweredIfWaiting(c.case_id, message.content);
+    await i.editReply({ content: result.status === 'exists' ? 'Already saved.' : 'Saved.' });
+  }
+
+  private savedCard(item: KnowledgeItem) {
+    const embed = new EmbedBuilder().setTitle(item.question_patterns[0].slice(0, 256))
+      .setDescription(item.canonical_answer.slice(0, 3500)).setColor(0x2fa36b);
+    if (item.applies_when || item.expires_at) embed.setFooter({ text: [item.applies_when, item.expires_at ? `Until ${item.expires_at.slice(0, 10)}` : null].filter(Boolean).join(' · ').slice(0, 2048) });
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`correct_answer:${item.knowledge_id}`).setLabel('Edit').setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`delete_answer:${item.knowledge_id}`).setLabel('Remove').setStyle(ButtonStyle.Danger));
+    return { embeds: [embed], components: [row] };
+  }
+  private async handleAnswers(i: ChatInputCommandInteraction) {
+    if (!(await this.moderatorOnly(i))) return;
+    await i.deferReply({ ephemeral: true });
+    const query = i.options.getString('query');
+    const items = query ? await this.knowledgeRepo.searchLexical(i.guildId!, query, 25) : await this.knowledgeRepo.getApproved(i.guildId!);
+    if (!items.length) { await i.editReply({ content: 'No saved answers.' }); return; }
+    const menu = new StringSelectMenuBuilder().setCustomId('open_answer').setPlaceholder('Open a saved answer')
+      .addOptions(items.slice(0, 25).map(item => ({ label: item.question_patterns[0].slice(0, 100), value: item.knowledge_id })));
+    await i.editReply({ content: `${items.length} saved answer${items.length === 1 ? '' : 's'}.${items.length > 25 ? ' Search with /answers query.' : ''}`,
+      components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)] });
+  }
+
+  private async visibleWaiting(i: Interaction): Promise<SupportCase[]> {
+    const config = await this.guildRepo.get(i.guildId!);
+    const waiting = await this.caseRepo.listWaiting(i.guildId!, 50);
+    const visible: SupportCase[] = [];
+    for (const c of waiting) {
+      if ((config?.support_channel_ids.includes(c.channel_id) || config?.support_channel_ids.includes(c.thread_id || '')) && await this.accessibleChannel(i, c, false)) visible.push(c);
+    }
+    return visible;
+  }
+
+  private async accessibleChannel(i: Interaction, c: SupportCase, requireSend = true) {
+    if (!i.guild || i.guildId !== c.guild_id) return null;
     try {
-      const { link } = await this.githubCopilot.prepareDraft(caseId, interaction.user.id);
-      const card = buildIssueDraftCard(link);
-      await interaction.editReply({ embeds: [card.embed], components: [card.row] });
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await interaction.editReply({ content: `❌ Failed to prepare GitHub issue draft: ${msg}` });
+      const channel = await i.guild.channels.fetch(c.thread_id || c.channel_id);
+      if (!channel || channel.type === ChannelType.PrivateThread || !channel.isTextBased() || !('send' in channel)) return null;
+      const member = await i.guild.members.fetch(i.user.id);
+      const bot = i.guild.members.me || await i.guild.members.fetchMe();
+      if (!channel.permissionsFor(member)?.has(PermissionFlagsBits.ViewChannel) || !channel.permissionsFor(bot)?.has(PermissionFlagsBits.ViewChannel)) return null;
+      if (requireSend && (!channel.permissionsFor(bot)?.has([PermissionFlagsBits.EmbedLinks, channel.isThread() ? PermissionFlagsBits.SendMessagesInThreads : PermissionFlagsBits.SendMessages]) || (channel.isThread() && (channel.archived || channel.locked)))) return null;
+      return channel;
+    } catch { return null; }
+  }
+  async handleSelect(i: StringSelectMenuInteraction): Promise<void> {
+    if (!i.guildId || !(await this.moderatorOnly(i))) return;
+    if (i.customId.startsWith('share_answers:')) {
+      await i.reply({ content: 'Saved knowledge now helps new questions automatically.', ephemeral: true }); return;
+    }
+    if (i.customId === 'open_answer') {
+      const item = await this.knowledgeRepo.get(i.values[0]);
+      if (!item || item.guild_id !== i.guildId || item.approval_status !== 'approved') {
+        await i.reply({ content: 'Answer unavailable.', ephemeral: true }); return;
+      }
+      await i.reply({ ...this.savedCard(item), ephemeral: true }); return;
+    }
+    if (i.customId === 'open_queue_topic') {
+      await i.deferReply({ ephemeral: true });
+      const group = groupWaitingQuestions(await this.visibleWaiting(i)).find(topic => topic.cases.some(c => c.case_id === i.values[0]));
+      if (!group) { await i.editReply({ content: 'Already handled. Open /queue again.' }); return; }
+      const menu = new StringSelectMenuBuilder().setCustomId('open_queue').setPlaceholder('Open a question')
+        .addOptions(group.cases.slice(0, 25).map(c => ({ label: c.title.slice(0, 100), description: `Asked by ${c.requester_username}`.slice(0, 100), value: c.case_id })));
+      await i.editReply({ content: `${group.cases.length} question${group.cases.length === 1 ? '' : 's'} with similar wording.`,
+        components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)] }); return;
+    }
+    if (i.customId === 'open_queue') {
+      const c = await this.caseRepo.get(i.values[0]);
+      if (!c || !(await this.guildRepo.isSupportChannel(i.guildId, c.channel_id, c.thread_id)) || !(await this.accessibleChannel(i, c, false))) {
+        await i.reply({ content: 'Question unavailable.', ephemeral: true }); return;
+      }
+      const failed = (await this.evidenceRepo.getByCaseId(c.case_id)).find(e => e.metadata.feedback === 'failed');
+      const context = failed ? `\n\nTried: ${safeText(String(failed.metadata.failed_answer)).slice(0, 220)}\nMember: ${safeText(failed.excerpt).slice(0, 220)}` : '';
+      await i.reply({ content: `[${safeText(c.title).slice(0, 150)}](${questionUrl(c)})${context}`, ephemeral: true,
+        components: [new ActionRowBuilder<ButtonBuilder>().addComponents(
+          new ButtonBuilder().setLabel('Open post').setStyle(ButtonStyle.Link).setURL(questionUrl(c)),
+          new ButtonBuilder().setLabel('Solved').setStyle(ButtonStyle.Success).setCustomId(`solve_case:${c.case_id}`),
+          new ButtonBuilder().setLabel('Retry').setStyle(ButtonStyle.Secondary).setCustomId(`retry_case:${c.case_id}`))] });
     }
   }
 
-  private async handleSources(interaction: ChatInputCommandInteraction): Promise<void> {
-    const config = await this.guildRepo.get(interaction.guildId!);
-    const domains = config?.allowed_domains || [];
-    const repos = config?.connected_repos || [];
-
-    const text = [
-      '### 🌐 Configured Documentation & Source Allowlist',
-      `• **Allowed Documentation Domains**: ${domains.map(d => `\`${d}\``).join(', ') || '*None (web fetching disabled)*'}`,
-      `• **Connected GitHub Repositories**: ${repos.map(r => `\`${r}\``).join(', ') || '*None connected*'}`,
-    ].join('\n');
-
-    await interaction.reply({ content: text, ephemeral: true });
+  private editModal(item: KnowledgeItem, correction: boolean) {
+    const modal = new ModalBuilder().setCustomId(`${correction ? 'correct_answer' : 'edit_draft'}:${item.knowledge_id}:v${item.current_version}`).setTitle(correction ? 'Edit answer' : 'Review this answer');
+    const fields = [
+      new TextInputBuilder().setCustomId('question').setLabel('Question (one per line)').setStyle(TextInputStyle.Paragraph).setMaxLength(1000).setValue(item.question_patterns.join('\n').slice(0, 1000)),
+      new TextInputBuilder().setCustomId('answer').setLabel('Answer').setStyle(TextInputStyle.Paragraph).setMaxLength(3500).setValue(item.canonical_answer),
+      new TextInputBuilder().setCustomId('scope').setLabel('Scope (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(200).setValue(item.applies_when || ''),
+    ];
+    if (!correction) fields.push(new TextInputBuilder().setCustomId('days').setLabel('Expires in days (optional, 1–365)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(3).setValue(item.expires_at ? String(Math.max(1, Math.ceil((Date.parse(item.expires_at) - Date.now()) / 86400000))) : ''));
+    return modal.addComponents(...fields.map(f => new ActionRowBuilder<TextInputBuilder>().addComponents(f)));
+  }
+  async handleModal(i: ModalSubmitInteraction): Promise<void> {
+    if (!i.guildId || !(await this.moderatorOnly(i))) return;
+    const [action, target, version] = i.customId.split(':');
+    if (!['edit_draft', 'correct_answer'].includes(action)) return;
+    const item = await this.knowledgeRepo.get(target);
+    if (!item || item.guild_id !== i.guildId || version !== `v${item.current_version}` || (action === 'correct_answer' ? item.approval_status !== 'approved' : !['candidate', 'pending_review'].includes(item.approval_status))) {
+      await i.reply({ content: 'Answer changed. Open /answers again.', ephemeral: true }); return;
+    }
+    const patterns = [...new Set(i.fields.getTextInputValue('question').split('\n').map(s => s.trim()).filter(Boolean))];
+    const question = patterns[0];
+    const answer = i.fields.getTextInputValue('answer');
+    const scope = i.fields.getTextInputValue('scope').trim();
+    const days = action === 'edit_draft' ? i.fields.getTextInputValue('days').trim() : '';
+    if (!question || patterns.length > 5 || patterns.some(p => p.length > 200) || !answer.trim() || (days && (!/^\d+$/.test(days) || +days < 1 || +days > 365))) {
+      await i.reply({ content: 'Add a question (up to 200 characters per line) and answer. Expiry: 1–365 days.', ephemeral: true }); return;
+    }
+    await i.deferReply({ ephemeral: true });
+    if (action === 'correct_answer') {
+      await this.learningPipeline.correctAndSupersede(target, { canonical_answer: answer, question_patterns: patterns, applies_when: scope || null, change_reason: 'Corrected through Discord review form' }, i.user.id);
+      await i.editReply({ content: 'Updated.' }); return;
+    }
+    const result = await this.learningPipeline.saveAnswer({ guildId: i.guildId, channelId: i.channelId || 'unavailable', adminUserId: i.user.id,
+      adminMessage: answer, sourceUrl: item.source_refs[0] || undefined, originCaseId: item.origin_case_id || undefined,
+      appliesWhen: scope || undefined, expiresAt: days ? new Date(Date.now() + +days * 86400000).toISOString() : null,
+      caseContext: { originalQuestion: question }, reviewedPatterns: patterns });
+    await this.learningPipeline.rejectCandidate(target, i.user.id, 'Saved through the simplified flow');
+    await i.editReply({ content: result.status === 'exists' ? 'Already saved.' : 'Saved.' });
   }
 
-  async handleButton(interaction: ButtonInteraction): Promise<void> {
-    const [action, targetId] = interaction.customId.split(':');
-    logger.info({ action, targetId, user: interaction.user.tag }, 'Received button interaction');
-
-    if (action === 'approve_know') {
-      if (!(await this.isAuthorizedAdmin(interaction))) {
-        await interaction.reply({ content: '❌ Only authorized support administrators can approve knowledge.', ephemeral: true });
-        return;
+  async handleButton(i: ButtonInteraction): Promise<void> {
+    const [action, target] = i.customId.split(':');
+    if (!i.guildId || !target) return;
+    if (['solve_case', 'handoff_case', 'retry_case'].includes(action)) {
+      const c = await this.caseRepo.get(target);
+      if (!c || c.guild_id !== i.guildId || (c.requester_id !== i.user.id && !(await this.isAuthorizedAdmin(i)))) {
+        await i.reply({ content: 'Only the asker or a moderator can do this.', ephemeral: true }); return;
       }
-      const approved = await this.learningPipeline.approveCandidate(targetId, interaction.user.id);
-      if (approved) {
-        await interaction.update({
-          content: `✅ **Knowledge Approved & Indexed** by <@${interaction.user.id}>. This resolution is now part of ThreadSherpa's persistent memory and will be applied to future inquiries.`,
-          components: [],
-        });
+      if (['resolved', 'closed'].includes(c.status)) { await i.reply({ content: 'Already closed.', ephemeral: true }); return; }
+      await i.deferUpdate();
+      if (action === 'retry_case') await this.orchestrator.investigateCase(target);
+      else await this.caseRepo.updateStatus(target, action === 'solve_case' ? 'resolved' : 'escalated', action === 'solve_case' ? (c.requester_id === i.user.id ? 'Member confirmed this helped' : 'Moderator marked solved') : 'Member requested moderator help');
+      await i.editReply({ content: action === 'handoff_case' ? 'Queued for a moderator.' : action === 'solve_case' ? 'Marked solved.' : null, ...await this.card(target) }); return;
+    }
+    if (!(await this.moderatorOnly(i))) return;
+    const item = await this.knowledgeRepo.get(target);
+    if (!item || item.guild_id !== i.guildId) { await i.reply({ content: 'Answer unavailable in this server.', ephemeral: true }); return; }
+    if (['approve_know', 'reject_know', 'edit_draft'].includes(action)) {
+      if (!['candidate', 'pending_review'].includes(item.approval_status)) { await i.reply({ content: 'This draft was already reviewed.', ephemeral: true }); return; }
+      if (action === 'edit_draft') { await i.showModal(this.editModal(item, false)); return; }
+      await i.deferUpdate();
+      if (action === 'reject_know') {
+        await this.learningPipeline.rejectCandidate(target, i.user.id);
+        await i.editReply({ content: 'Draft discarded.', embeds: [], components: [] }); return;
       }
-    } else if (action === 'reject_know') {
-      if (!(await this.isAuthorizedAdmin(interaction))) {
-        await interaction.reply({ content: '❌ Only authorized administrators can reject knowledge candidates.', ephemeral: true });
-        return;
+      const saved = await this.learningPipeline.saveAnswer({ guildId: i.guildId, channelId: i.channelId, adminUserId: i.user.id,
+        adminMessage: item.canonical_answer, sourceUrl: item.source_refs[0], originCaseId: item.origin_case_id || undefined,
+        reviewedPatterns: item.question_patterns, appliesWhen: item.applies_when || undefined, expiresAt: item.expires_at });
+      await this.learningPipeline.rejectCandidate(target, i.user.id, 'Saved through the simplified flow');
+      await i.editReply({ content: saved.status === 'exists' ? 'Already saved.' : 'Saved.', embeds: [], components: [] });
+    } else if (item.approval_status === 'approved') {
+      if (action === 'correct_answer') { await i.showModal(this.editModal(item, true)); return; }
+      if (action === 'delete_answer') {
+        await i.reply({ content: 'Remove this saved answer?',
+          components: [new ActionRowBuilder<ButtonBuilder>().addComponents(new ButtonBuilder().setCustomId(`confirm_delete:${target}`).setLabel('Remove').setStyle(ButtonStyle.Danger))], ephemeral: true }); return;
       }
-      await this.learningPipeline.rejectCandidate(targetId, interaction.user.id);
-      await interaction.update({
-        content: `❌ **Knowledge Candidate Rejected** by <@${interaction.user.id}>. Candidate will not be used in retrieval.`,
-        components: [],
-      });
-    } else if (action === 'publish_gh') {
-      if (!(await this.isAuthorizedAdmin(interaction))) {
-        await interaction.reply({ content: '❌ Only authorized administrators can publish GitHub issues.', ephemeral: true });
-        return;
+      if (action === 'confirm_delete') {
+        await this.knowledgeRepo.delete(target);
+        await i.update({ content: 'Removed.', components: [] }); return;
       }
-      await interaction.deferUpdate();
-      try {
-        const link = await this.githubCopilot.publishIssue(targetId, interaction.user.id);
-        await interaction.editReply({
-          content: `🎉 **GitHub Issue Successfully Created!**\nIssue #${link.issue_number}: [${link.draft_title}](${link.issue_url})`,
-          components: [],
-        });
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        await interaction.followUp({ content: `❌ Failed to publish GitHub issue: ${msg}`, ephemeral: true });
-      }
-    } else if (action === 'confirm_inc') {
-      if (!(await this.isAuthorizedAdmin(interaction))) {
-        await interaction.reply({ content: '❌ Only administrators can confirm incidents.', ephemeral: true });
-        return;
-      }
-      await this.incidentDetector.confirmIncident(targetId, interaction.user.id);
-      await interaction.update({
-        content: `🚨 **Incident Confirmed** by <@${interaction.user.id}>. Further similar reports will be grouped under this incident.`,
-        components: [],
-      });
-    } else if (action === 'resolve_inc') {
-      if (!(await this.isAuthorizedAdmin(interaction))) {
-        await interaction.reply({ content: '❌ Only administrators can resolve incidents.', ephemeral: true });
-        return;
-      }
-      await this.incidentDetector.resolveIncident(targetId, interaction.user.id);
-      await interaction.update({
-        content: `✅ **Incident Marked Resolved** by <@${interaction.user.id}>.`,
-        components: [],
-      });
+      if (action === 'share_know') { await i.reply({ content: 'Saved knowledge now helps new questions automatically.', ephemeral: true }); }
     }
   }
 
   async handleThreadCreate(thread: ThreadChannel): Promise<void> {
-    if (!thread.guildId) return;
-
-    // 1. One-time setup & support channel check:
-    // Only monitor if this thread or its parent (Forum or Text channel) is in support_channel_ids
-    const isSupport = await this.guildRepo.isSupportChannel(thread.guildId, thread.id, thread.parentId);
-    if (!isSupport) {
-      return;
-    }
-
-    logger.info({ threadId: thread.id, parentId: thread.parentId, name: thread.name }, 'New support thread/forum post detected');
-
-    // 2. Avoid duplicate cases if already registered
-    const existingCase = await this.caseRepo.getByThreadId(thread.id);
-    if (existingCase) return;
-
-    // 3. In Forum channels or text threads, fetch starter message if available
-    let starterMessage = await thread.fetchStarterMessage().catch(() => null);
-    if (!starterMessage) {
-      await new Promise(r => setTimeout(r, 1000));
-      starterMessage = await thread.fetchStarterMessage().catch(() => null);
-    }
-
-    const questionTitle = thread.name || starterMessage?.content?.slice(0, 100) || 'Support Inquiry';
-    const questionContent = starterMessage?.content || thread.name || 'Support Inquiry';
-    const requesterId = starterMessage?.author?.id || thread.ownerId || 'unknown_user';
-    const requesterUsername = starterMessage?.author?.username || 'user';
-
-    // 4. Create support case
-    const caseId = `case_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const newCase = await this.caseRepo.create({
-      case_id: caseId,
-      guild_id: thread.guildId,
-      channel_id: thread.parentId || thread.id,
-      thread_id: thread.id,
-      message_id: starterMessage?.id || thread.id,
-      requester_id: requesterId,
-      requester_username: requesterUsername,
-      category: 'general',
-      title: questionTitle,
-      status: 'new',
-      summary: questionContent,
-    });
-
-    // 5. Check incident clustering
-    await this.incidentDetector.detectCluster(newCase);
-
-    // 6. Check autonomy mode
-    const config = await this.guildRepo.get(thread.guildId);
-    if (config?.autonomy_mode === 'observe') {
-      logger.info({ caseId, threadId: thread.id }, 'Observe mode active; skipping automated response in new thread');
-      return;
-    }
-
-    // 7. Investigate and post response directly into the thread/forum post
-    await this.orchestrator.investigateCase(caseId);
-    const updated = (await this.caseRepo.get(caseId))!;
-    const evidence = await this.evidenceRepo.getByCaseId(caseId);
-    const embed = buildCaseEmbed(updated, evidence);
-
-    await Promise.resolve(thread.send({ embeds: [embed] })).catch(err => {
-      logger.warn({ err, threadId: thread.id }, 'Failed to post investigation embed to thread');
-    });
+    if (this.pendingThreads.has(thread.id) || thread.ownerId === thread.client?.user?.id) return;
+    this.pendingThreads.add(thread.id);
+    try {
+      if (!(await this.guildRepo.isSupportChannel(thread.guildId, thread.id, thread.parentId)) || await this.caseRepo.getByThreadId(thread.id)) return;
+      let starter = await thread.fetchStarterMessage().catch(() => null);
+      if (!starter) {
+        await new Promise(resolve => setTimeout(resolve, 750));
+        starter = await thread.fetchStarterMessage().catch(() => null);
+      }
+      if (!starter || starter.author.bot) return;
+      const c = await this.caseRepo.create({ case_id: id(), guild_id: thread.guildId, channel_id: thread.parentId || thread.id,
+        thread_id: thread.id, message_id: starter.id, requester_id: starter.author.id, requester_username: starter.author.username,
+        category: 'question', title: thread.name, summary: starter.content, status: 'new' });
+      const config = await this.guildRepo.get(thread.guildId);
+      if (config?.autonomy_mode !== 'auto') return;
+      const result = await this.orchestrator.investigateCase(c.case_id);
+      if (result.policyResult.action !== 'queue') await thread.send(await this.card(c.case_id));
+    } finally { this.pendingThreads.delete(thread.id); }
   }
 
   async handleMessage(message: Message): Promise<void> {
-    // 1. Ignore bots and own messages
-    if (message.author?.bot || message.system) return;
-    if (!message.guildId) return;
-
-    // 2. Only monitor configured support channels (requires one-time setup)
-    const isThread = Boolean(message.channel && typeof message.channel.isThread === 'function' && message.channel.isThread());
-    const parentId = isThread && message.channel && 'parentId' in message.channel ? (message.channel.parentId as string | null) : null;
-
-    const isSupport = await this.guildRepo.isSupportChannel(message.guildId, message.channelId, parentId);
-    if (!isSupport) {
-      return;
-    }
-
-    logger.debug({ channelId: message.channelId, isThread, author: message.author.tag }, 'Monitoring support channel message');
-
-    const member = message.member;
-    const roleIds = member?.roles?.cache
-      ? Array.from(member.roles.cache.values()).map((r: any) => r.id || r)
-      : [];
-    const isAdmin = (member?.permissions && typeof member.permissions.has === 'function' && member.permissions.has(PermissionFlagsBits.Administrator)) || (await this.guildRepo.isAdmin(message.guildId, roleIds));
-
-    // 3. Resolve active case (in thread or channel)
-    const threadId = isThread ? message.channelId : (message.thread?.id || undefined);
-    const activeCase = await this.caseRepo.findActiveCase(parentId || message.channelId, threadId);
-
-    // 4. Admin learning trigger: If admin replies in an active case, extract knowledge candidate!
-    if (isAdmin && activeCase && activeCase.requester_id !== message.author.id && message.content.length > 20) {
-      logger.info({ caseId: activeCase.case_id, admin: message.author.tag }, 'Admin response detected in active case — proposing knowledge candidate');
-
-      const result = await this.learningPipeline.proposeFromAdminMessage({
-        guildId: message.guildId,
-        channelId: message.channelId,
-        adminUserId: message.author.id,
-        adminMessage: message.content,
-        caseContext: {
-          title: activeCase.title,
-          originalQuestion: activeCase.summary || activeCase.title,
-          priorBotAnswer: activeCase.last_answer || undefined,
-        },
-      });
-
-      const card = buildCandidateReviewCard(result.candidate, result.conflictingItems);
-      await message.reply({
-        content: `💡 **ThreadSherpa Human-in-the-Loop Learning**\nDetected resolution from support admin <@${message.author.id}>. Review proposed knowledge below:`,
-        embeds: [card.embed],
-        components: [card.row],
-      });
-
-      return;
-    }
-
-    // 5. User follow-up in an existing active case -> Update case context!
-    if (activeCase && !isAdmin && message.content.length > 5) {
-      logger.info({ caseId: activeCase.case_id, author: message.author.tag }, 'User follow-up detected in active case — updating context');
-
-      const authorTag = message.author.username;
-      const note = `[Update from @${authorTag}]: ${message.content}`;
-      const newSummary = `${activeCase.summary || activeCase.title}\n\n${note}`.slice(0, 3000);
-      await this.caseRepo.updateSummary(activeCase.case_id, newSummary);
-
-      await this.evidenceRepo.add({
-        evidence_id: `ev_ctx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-        case_id: activeCase.case_id,
-        source_type: 'discord_message',
-        source_url: message.url,
-        title: `Follow-up from ${authorTag}`,
-        excerpt: message.content.slice(0, 500),
-        authority_score: 0.7,
-        metadata: { subtype: 'user_context', updated_by: authorTag },
-      });
-
-      // Acknowledge context update with a reaction
-      await message.react('📝').catch(() => {});
-
-      // If the case was awaiting user input or the user asks a follow-up, re-investigate
-      const config = await this.guildRepo.get(message.guildId);
-      const isAutoOrSupervised = config?.autonomy_mode === 'auto' || config?.autonomy_mode === 'supervised';
-      const needsResponse = activeCase.status === 'awaiting_user' || activeCase.status === 'triaging' || message.content.includes('?');
-
-      if (isAutoOrSupervised && needsResponse) {
-        await this.orchestrator.investigateCase(activeCase.case_id);
-        const updated = (await this.caseRepo.get(activeCase.case_id))!;
-        const evidence = await this.evidenceRepo.getByCaseId(activeCase.case_id);
-        const embed = buildCaseEmbed(updated, evidence);
-        await message.reply({ embeds: [embed] });
-      }
-
-      return;
-    }
-
-    // 6. User new question in support channel: auto-triage if autonomy mode permits
+    if (message.author?.bot || message.system || !message.guildId) return;
+    const thread = message.channel?.isThread() ? message.channel : null;
+    if (!(await this.guildRepo.isSupportChannel(message.guildId, message.channelId, thread?.parentId))) return;
     const config = await this.guildRepo.get(message.guildId);
-    if (config?.autonomy_mode === 'observe') {
-      return; // Do not send unsolicited answer in observe mode
-    }
-
-    if (!activeCase && message.content.length > 10) {
-      // In a text channel, spawn a support thread if possible to keep channel tidy
-      let targetThreadId: string | null = isThread ? message.channelId : null;
-      let replyTarget: Message | ThreadChannel = message;
-
-      if (!isThread && message.channel.type === ChannelType.GuildText && 'threads' in message.channel) {
-        const spawnedThread = await (message.channel as any).threads?.create?.({
-          name: message.content.slice(0, 80),
-          autoArchiveDuration: 1440,
-        }).catch(() => null);
-
-        if (spawnedThread) {
-          targetThreadId = spawnedThread.id;
-          replyTarget = spawnedThread;
-        }
+    const roles = message.member?.roles?.cache ? [...message.member.roles.cache.keys()] : [];
+    const c = thread ? await this.caseRepo.getByThreadId(thread.id) : message.reference?.messageId ? await this.caseRepo.getByMessageId(message.reference.messageId) : null;
+    if (c?.message_id === message.id) return;
+    const moderator = message.member?.permissions?.has(PermissionFlagsBits.Administrator) || await this.guildRepo.isAdmin(message.guildId, roles);
+    if (moderator && (!c || c.requester_id !== message.author.id) && !message.content.trim().endsWith('?')) return;
+    if (c) {
+      if (c.guild_id !== message.guildId || c.requester_id !== message.author.id || c.status === 'closed') return;
+      const feedback = answerFeedback(message.content);
+      if (feedback === 'solved' && ['answered', 'awaiting_user'].includes(c.status)) {
+        await this.caseRepo.updateSummary(c.case_id, `${c.summary || c.title}\n\nFollow-up: ${message.content}`.slice(-3000));
+        await this.caseRepo.updateStatus(c.case_id, 'resolved', 'Member confirmed in conversation'); return;
       }
-
-      // Create new case
-      const caseId = `case_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-      const newCase = await this.caseRepo.create({
-        case_id: caseId,
-        guild_id: message.guildId,
-        channel_id: parentId || message.channelId,
-        thread_id: targetThreadId,
-        message_id: message.id,
-        requester_id: message.author.id,
-        requester_username: message.author.username,
-        category: 'general',
-        title: message.content.slice(0, 100),
-        status: 'new',
-        summary: message.content,
-      });
-
-      // Cluster check
-      await this.incidentDetector.detectCluster(newCase);
-
-      // Investigate
-      await this.orchestrator.investigateCase(caseId);
-      const updated = (await this.caseRepo.get(caseId))!;
-      const evidence = await this.evidenceRepo.getByCaseId(caseId);
-
-      const embed = buildCaseEmbed(updated, evidence);
-      if (targetThreadId && !isThread && replyTarget !== (message as unknown)) {
-        await (replyTarget as ThreadChannel).send({ embeds: [embed] });
-      } else {
-        await message.reply({ embeds: [embed] });
+      if (feedback === 'failed' && c.last_answer && ['answered', 'awaiting_user', 'resolved', 'awaiting_admin', 'escalated'].includes(c.status)) {
+        if (c.status === 'resolved') await this.caseRepo.reopen(c.case_id, 'Member reported the answer did not help');
+        await this.caseRepo.updateSummary(c.case_id, `${c.summary || c.title}\n\nFollow-up: ${message.content}`.slice(-3000));
+        await this.evidenceRepo.add({ evidence_id: `ev_${randomUUID()}`, case_id: c.case_id, source_type: 'discord_message', source_url: message.url,
+          title: 'Answer did not help', excerpt: message.content.slice(0, 500), authority_score: 0.7,
+          metadata: { subtype: 'user_context', feedback: 'failed', failed_answer: c.last_answer } });
+        await this.caseRepo.updateStatus(c.case_id, 'awaiting_admin', 'Member reported the answer did not help'); return;
       }
+      if (c.status === 'resolved' || message.content.length < 6) return;
+      if (/^(thanks?|thank you|ty|ok(ay)?|got it|great|perfect)[!.\s]*$/i.test(message.content.trim())) return;
+      await this.caseRepo.updateSummary(c.case_id, `${c.summary || c.title}\n\nFollow-up: ${message.content}`.slice(-3000));
+      await this.evidenceRepo.add({ evidence_id: `ev_${randomUUID()}`, case_id: c.case_id, source_type: 'discord_message', source_url: message.url, title: 'Asker follow-up', excerpt: message.content.slice(0, 500), authority_score: 0.7, metadata: { subtype: 'user_context' } });
+      if (config?.autonomy_mode === 'auto' || (config?.autonomy_mode === 'supervised' && c.status === 'awaiting_user')) {
+        const result = await this.orchestrator.investigateCase(c.case_id);
+        if (result.policyResult.action !== 'queue') await message.reply(await this.card(c.case_id));
+      }
+      return;
     }
+    if (thread || config?.autonomy_mode !== 'auto' || message.content.length < 11 || await this.caseRepo.getByMessageId(message.id)) return;
+    const created = await this.caseRepo.create({ case_id: id(), guild_id: message.guildId, channel_id: message.channelId,
+      message_id: message.id, requester_id: message.author.id, requester_username: message.author.username,
+      category: 'question', title: message.content.slice(0, 200), summary: message.content, status: 'new' });
+    const result = await this.orchestrator.investigateCase(created.case_id);
+    if (result.policyResult.action !== 'queue') await message.reply(await this.card(created.case_id));
   }
 }

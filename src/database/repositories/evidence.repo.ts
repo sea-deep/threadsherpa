@@ -28,6 +28,15 @@ export class EvidenceRepository {
     return docs.map(d => this.mapDoc(d as Record<string, unknown>));
   }
 
+  async markCited(caseId: string, urls: string[]): Promise<void> {
+    await this.collection.updateMany({ case_id: caseId }, { $set: { 'metadata.used_in_answer': false } });
+    if (urls.length) await this.collection.updateMany({ case_id: caseId, source_url: { $in: urls } }, { $set: { 'metadata.used_in_answer': true } });
+  }
+
+  async clearRetrieved(caseId: string): Promise<void> {
+    await this.collection.deleteMany({ case_id: caseId, source_type: { $nin: ['discord_message', 'user_context'] } });
+  }
+
   private mapDoc(doc: Record<string, unknown>): CaseEvidence {
     return {
       evidence_id: String(doc.evidence_id),

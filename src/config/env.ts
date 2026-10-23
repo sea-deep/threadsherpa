@@ -9,7 +9,7 @@ const envSchema = z.object({
 
   // Discord Configuration
   DISCORD_BOT_TOKEN: z.string().min(1, 'DISCORD_BOT_TOKEN is required in production').default('dummy_token_for_tests'),
-  DISCORD_CLIENT_ID: z.string().default('123456789012345678'),
+  DISCORD_CLIENT_ID: z.string().default(''),
   DISCORD_DEV_GUILD_ID: z.string().optional(),
 
   // Unified Database: MongoDB / MongoDB Atlas
@@ -18,7 +18,8 @@ const envSchema = z.object({
   MONGODB_DB_NAME: z.string().default('threadsherpa'),
 
   // Model Provider Selection & Cloud APIs
-  MODEL_PROVIDER: z.enum(['ollama', 'openai', 'gemini', 'groq', 'openrouter', 'paper', 'paperinstruments']).default('ollama'),
+  MODEL_PROVIDER: z.preprocess(value => value === 'hybrid' ? 'ollama' : value,
+    z.enum(['ollama', 'openai', 'gemini', 'groq', 'openrouter', 'paper', 'paperinstruments']).default('ollama')),
 
   // Local Open-Weight Model Configuration (Ollama / Gemma)
   OLLAMA_BASE_URL: z.string().url().default('http://localhost:11434'),
@@ -29,7 +30,9 @@ const envSchema = z.object({
   // Paper Instruments (Ultramarine 1 Flash)
   PAPER_INSTRUMENTS_API_KEY: z.string().optional(),
   PAPERINSTRUMENTS_API_KEY: z.string().optional(),
-  PAPER_MODEL: z.string().default('ultramarine-1-flash'),
+  PAPER_MODEL: z.literal('ultramarine-1-flash').default('ultramarine-1-flash'),
+  PAPER_REASONING_EFFORT: z.enum(['low', 'high', 'max']).default('low'),
+  PAPER_MAX_COMPLETION_TOKENS: z.coerce.number().int().min(256).max(16384).default(4096),
 
   // External / Cloud Model Provider Configuration
   OPENAI_API_KEY: z.string().optional(),
@@ -39,19 +42,11 @@ const envSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   GROQ_API_KEY: z.string().optional(),
 
-  // GitHub Integration Configuration
-  GITHUB_TOKEN: z.string().optional(),
-  GITHUB_DEFAULT_REPO: z.string().optional(),
-
-  // Partner Integrations (Hacktoberfest Challenge Categories)
+  // Optional observability
   SENTRY_DSN: z.string().optional(),
-  SERPAPI_API_KEY: z.string().optional(),
 
   // Support Bot Settings
-  DEFAULT_AUTONOMY_MODE: z.enum(['observe', 'supervised', 'auto']).default('supervised'),
-  MAX_INVESTIGATION_ROUNDS: z.coerce.number().int().min(1).max(5).default(3),
-  MAX_TOOL_CALLS_PER_INVESTIGATION: z.coerce.number().int().min(1).max(12).default(6),
-  INVESTIGATION_TIMEOUT_MS: z.coerce.number().int().positive().default(45000),
+  MAX_TOOL_CALLS_PER_INVESTIGATION: z.coerce.number().int().min(1).max(12).default(4),
   ALLOWED_DOMAINS: z.string().default('docs.github.com,nodejs.org,mongodb.com'),
 });
 

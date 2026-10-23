@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { z } from 'zod';
 import { OpenAICompatibleProvider } from '../../src/integrations/model/openai.provider.js';
 import { createModelProvider } from '../../src/integrations/model/factory.js';
+import { PaperProvider } from '../../src/integrations/model/paper.provider.js';
 import { loadConfig } from '../../src/config/env.js';
 
 describe('OpenAI-Compatible & Cloud Model Provider', () => {
@@ -110,7 +111,7 @@ describe('OpenAI-Compatible & Cloud Model Provider', () => {
       expect(structured.confidence).toBe(0.95);
     });
 
-    it('parses embeddings and provides deterministic fallback when API is down', async () => {
+    it('parses real embeddings and returns no vector when the API is down', async () => {
       // 1. Success case
       globalThis.fetch = vi.fn().mockResolvedValue({
         ok: true,
@@ -135,7 +136,7 @@ describe('OpenAI-Compatible & Cloud Model Provider', () => {
 
       const fallbackVec = await provider.generateEmbedding('test fallback');
       expect(Array.isArray(fallbackVec)).toBe(true);
-      expect(fallbackVec.length).toBe(768);
+      expect(fallbackVec).toEqual([]);
     });
   });
 
@@ -173,7 +174,7 @@ describe('OpenAI-Compatible & Cloud Model Provider', () => {
       });
 
       const provider = createModelProvider(config);
-      expect(provider).toBeInstanceOf(OpenAICompatibleProvider);
+      expect(provider).toBeInstanceOf(PaperProvider);
     });
   });
 });

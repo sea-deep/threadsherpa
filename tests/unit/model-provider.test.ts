@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { OllamaProvider } from '../../src/integrations/model/ollama.provider.js';
 import { SupportCaseClassificationSchema } from '../../src/agent/schemas.js';
@@ -10,7 +10,7 @@ describe('Ollama Model Provider', () => {
     embeddingModel: 'embeddinggemma-2:270m',
   });
 
-  it('performs health check against local Ollama', async () => {
+  it.skipIf(process.env.RUN_LIVE_MODELS !== '1')('performs health check against local Ollama', async () => {
     const health = await provider.healthCheck();
     expect(health.ok).toBe(true);
     expect(health.models.length).toBeGreaterThan(0);
@@ -18,7 +18,7 @@ describe('Ollama Model Provider', () => {
     expect(health.embeddingModelAvailable).toBe(true);
   });
 
-  it('generates real 768-dimensional embeddings', async () => {
+  it.skipIf(process.env.RUN_LIVE_MODELS !== '1')('generates real 768-dimensional embeddings', async () => {
     const embedding = await provider.generateEmbedding('How to resolve database connection error in SQLite');
     expect(Array.isArray(embedding)).toBe(true);
     expect(embedding.length).toBe(768);
@@ -27,12 +27,13 @@ describe('Ollama Model Provider', () => {
     expect(hasNonZero).toBe(true);
   });
 
-  it('generates structured output validated with Zod', async () => {
+  it.skipIf(process.env.RUN_LIVE_MODELS !== '1')('generates structured output validated with Zod', async () => {
     const prompt = `Classify this user support message: "I am trying to run npm install on Node 26 on macOS M3, but better-sqlite3 fails with C++ compiler errors"`;
     
     const result = await provider.generateStructured({
       prompt,
       schema: SupportCaseClassificationSchema,
+      schemaName: 'SupportCaseClassification',
       timeoutMs: 45000,
     });
 
@@ -42,16 +43,11 @@ describe('Ollama Model Provider', () => {
     expect(['install', 'bug', 'general', 'question']).toContain(result.category);
   }, 90000);
 
-  it('uses fallback embedding deterministically when offline or error occurs', () => {
-    const offlineProvider = new OllamaProvider({
-      baseUrl: 'http://localhost:99999',
-    });
-    // @ts-expect-error accessing private method for unit test
-    const vec1 = offlineProvider.fallbackEmbedding('test problem');
-    // @ts-expect-error accessing private method for unit test
-    const vec2 = offlineProvider.fallbackEmbedding('test problem');
-
-    expect(vec1.length).toBe(768);
-    expect(vec1).toEqual(vec2);
+  it('uses keyword search when embeddings are unavailable, without fabricating vectors', async () => {
+    const mock = vi.spyOn(globalThis, 'fetch').mockRejectedValue(new Error('offline'));
+    try {
+      expect(await provider.generateEmbedding('test problem')).toEqual([]);
+    } finally { mock.mockRestore(); }
   });
+
 });

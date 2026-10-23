@@ -1,9 +1,7 @@
-# Render Blueprint Specification for ThreadSherpa
-# Category: Best Use of Render ($200)
-
+# Optional Discord gateway worker. The model endpoint must be hosted separately.
 services:
   - type: worker
-    name: threadsherpa-copilot
+    name: threadsherpa
     runtime: node
     plan: starter
     buildCommand: npm ci && npm run build
@@ -12,37 +10,23 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
-      - key: DATABASE_PROVIDER
-        value: mongodb
       - key: MONGODB_URI
-        sync: false # Set via Render Dashboard with your MongoDB Atlas connection string
+        sync: false
       - key: MONGODB_DB_NAME
         value: threadsherpa
       - key: DISCORD_BOT_TOKEN
-        sync: false # Set via Render Dashboard
-      - key: DISCORD_CLIENT_ID
-        sync: false # Set via Render Dashboard
-      - key: SENTRY_DSN
-        sync: false # Optional Sentry Agent Tracing DSN
-      - key: SERPAPI_API_KEY
-        sync: false # Optional SerpApi Google search key
+        sync: false
       - key: MODEL_PROVIDER
-        value: paper # 'paper' | 'gemini' | 'openai' | 'groq' | 'ollama'
+        value: paper
       - key: PAPER_INSTRUMENTS_API_KEY
-        sync: false # Set via Render Dashboard when using Paper Instruments (Ultramarine 1 Flash)
+        sync: false
       - key: PAPER_MODEL
         value: ultramarine-1-flash
-      - key: GEMINI_API_KEY
-        sync: false # Set via Render Dashboard when using Google Gemini cloud inference
-      - key: OPENAI_API_KEY
-        sync: false # Set via Render Dashboard when using OpenAI / OpenRouter
-      - key: GROQ_API_KEY
-        sync: false # Set via Render Dashboard when using Groq
-      - key: OPENAI_MODEL
-        value: gemini-2.0-flash # Or 'gpt-4o-mini', 'llama-3.3-70b-versatile'
       - key: OLLAMA_BASE_URL
-        value: http://localhost:11434
+        sync: false
       - key: OLLAMA_MODEL
         value: gemma4:e4b-it-qat
       - key: OLLAMA_EMBEDDING_MODEL
         value: embeddinggemma-2:270m
+      - key: SENTRY_DSN
+        sync: false

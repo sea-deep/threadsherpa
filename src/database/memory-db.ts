@@ -11,12 +11,12 @@ export class MemoryCollection<T extends Document = Document> {
     if (doc.version_id) return String(doc.version_id);
     if (doc.review_id) return String(doc.review_id);
     if (doc.evidence_id) return String(doc.evidence_id);
-    if (doc.link_id) return String(doc.link_id);
     if (doc.event_id) return String(doc.event_id);
     if (doc.run_id) return String(doc.run_id);
     if (doc.case_id && this.collectionName === 'support_cases') return String(doc.case_id);
     if (doc.knowledge_id && this.collectionName === 'knowledge_items') return String(doc.knowledge_id);
-    if (doc.incident_id && this.collectionName === 'incidents') return String(doc.incident_id);
+    if (doc.delivery_id && this.collectionName === 'answer_deliveries') return String(doc.delivery_id);
+    if (doc.preview_id && this.collectionName === 'share_previews') return String(doc.preview_id);
     if (doc.guild_id && this.collectionName === 'guild_configs') return String(doc.guild_id);
     return `mem_${this.autoInc++}`;
   }
@@ -24,6 +24,9 @@ export class MemoryCollection<T extends Document = Document> {
   async insertOne(doc: T): Promise<{ insertedId: string; acknowledged: boolean }> {
     const cloned = JSON.parse(JSON.stringify(doc)) as T;
     const id = this.getDocId(cloned);
+    if (this.collectionName === 'answer_deliveries' && this.docs.has(id)) {
+      throw Object.assign(new Error('Duplicate delivery'), { code: 11000 });
+    }
     if (!(cloned as Record<string, unknown>)._id) {
       (cloned as Record<string, unknown>)._id = id;
     }
@@ -41,7 +44,9 @@ export class MemoryCollection<T extends Document = Document> {
   }
 
   async findOne(filter: Filter<T> = {}, options?: FindOptions): Promise<T | null> {
-    const list = await this.find(filter, options).toArray();
+    const cursor = this.find(filter, options);
+    if (options?.sort) cursor.sort(options.sort as Sort);
+    const list = await cursor.toArray();
     return list.length > 0 ? list[0] : null;
   }
 
@@ -101,7 +106,8 @@ export class MemoryCollection<T extends Document = Document> {
   }
 
   async updateOne(filter: Filter<T>, update: UpdateFilter<T>, options?: { upsert?: boolean }): Promise<{ matchedCount: number; modifiedCount: number; upsertedCount: number; upsertedId?: string }> {
-    const existing = await this.findOne(filter);
+    // Match and mutate in one synchronous section, like MongoDB single-document updates.
+    const existing = [...this.docs.values()].find(doc => this.matchesFilter(doc, filter));
     if (!existing) {
       if (options?.upsert) {
         const newDoc = { ...(filter as Record<string, unknown>) } as T;
@@ -181,7 +187,15 @@ export class MemoryCollection<T extends Document = Document> {
   private applyUpdate(target: T, update: UpdateFilter<T>): void {
     const u = update as Record<string, unknown>;
     if (u.$set && typeof u.$set === 'object') {
-      Object.assign(target, u.$set);
+      for (const [key, value] of Object.entries(u.$set as Record<string, unknown>)) {
+        const parts = key.split('.');
+        let record = target as Record<string, unknown>;
+        for (const part of parts.slice(0, -1)) {
+          if (!record[part] || typeof record[part] !== 'object') record[part] = {};
+          record = record[part] as Record<string, unknown>;
+        }
+        record[parts.at(-1)!] = value;
+      }
     }
     if (u.$inc && typeof u.$inc === 'object') {
       for (const [key, incVal] of Object.entries(u.$inc as Record<string, number>)) {
@@ -228,6 +242,7 @@ export class MemoryCollection<T extends Document = Document> {
       if (key === '$or' || key === '$and' || key === '$text') continue;
 
       const actual = docObj[key];
+      if (expected === null && actual === undefined) continue;
 
       if (expected && typeof expected === 'object' && !Array.isArray(expected) && !(expected instanceof RegExp)) {
         const expObj = expected as Record<string, unknown>;

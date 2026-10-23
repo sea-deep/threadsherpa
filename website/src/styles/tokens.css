@@ -1,0 +1,82 @@
+:root {
+  /* Ink and paper */
+  --ink: #0b1017;
+  --ink-raised: #16202b;
+  --ink-panel: #111a24;
+  --ink-deep: #080d13;
+  --paper: #f5f2ec;
+  --paper-2: #ece7dd;
+  --paper-3: #e4ded2;
+
+  /* Trail */
+  --scree: #5f7183;
+  --mist: #a7b4bf;
+  --ash: #7c8a99;
+  --lantern: #f2a03d;
+  --lantern-deep: #b96f12;
+  --lantern-ink: #8a5209;
+  --lantern-soft: #fbe3be;
+  --trailhead: #3d8bd4;
+  --pine: #2fa36b;
+  --beacon: #e0483c;
+
+  /* Text */
+  --text-on-ink: var(--paper);
+  --text-muted-ink: #a7b4bf;
+  --text-subtle-ink: #7f8f9e;
+  --text-on-paper: #0b1017;
+  --text-muted-paper: #4a5864;
+  --text-subtle-paper: #5f6b74;
+
+  /* Lines */
+  --line-ink: rgba(245, 242, 236, 0.14);
+  --line-ink-soft: rgba(245, 242, 236, 0.08);
+  --line-paper: rgba(11, 16, 23, 0.16);
+  --line-paper-soft: rgba(11, 16, 23, 0.09);
+
+  /* Type */
+  --font-display: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  --font-body: "Inter", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+
+  --fs-body: 1.125rem;
+  --fs-ui: 0.9375rem;
+  --fs-small: 0.8125rem;
+  --fs-micro: 0.6875rem;
+
+  /* Space */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-9: 3rem;
+  --space-10: 4.5rem;
+  --space-11: 6.5rem;
+  --space-12: 9rem;
+
+  /* Layout */
+  --page-max: 1440px;
+  --gutter: clamp(20px, 5vw, 64px);
+  --header-h: 72px;
+
+  /* Shape */
+  --r-control: 8px;
+  --r-panel: 12px;
+  --r-stage: 18px;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+}
+
+@media (max-width: 767px) {
+  :root {
+    --header-h: 64px;
+    --fs-body: 1.0625rem;
+  }
+}

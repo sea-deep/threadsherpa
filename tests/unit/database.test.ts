@@ -23,16 +23,16 @@ describe('MongoDB Unified Database Engine', () => {
     const casesCol = db.collection('support_cases');
     const knowledgeCol = db.collection('knowledge_items');
     const evidenceCol = db.collection('case_evidence');
-    const incidentCol = db.collection('incidents');
-    const githubCol = db.collection('github_links');
+    const previewsCol = db.collection('share_previews');
+    const deliveryCol = db.collection('answer_deliveries');
     const auditCol = db.collection('audit_events');
 
     expect(guildConfigCol).toBeDefined();
     expect(casesCol).toBeDefined();
     expect(knowledgeCol).toBeDefined();
     expect(evidenceCol).toBeDefined();
-    expect(incidentCol).toBeDefined();
-    expect(githubCol).toBeDefined();
+    expect(previewsCol).toBeDefined();
+    expect(deliveryCol).toBeDefined();
     expect(auditCol).toBeDefined();
   });
 

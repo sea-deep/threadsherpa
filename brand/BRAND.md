@@ -1,7 +1,7 @@
 # ThreadSherpa — Brand System
 
 **Version 1.0 · 2026**
-*Investigate once. Remember the resolution.*
+*Answer once. Help the next person.*
 
 ---
 
@@ -55,7 +55,7 @@ remembers what a human has signed off on.
 | Level | Line | Use |
 |---|---|---|
 | Promise | **Stop solving the same problem twice.** | Website, social card, talks |
-| Product line | **Investigate once. Remember the resolution.** | README, banner, docs |
+| Product line | **Answer once. Help the next person.** | README, banner, docs |
 | Descriptor | Evidence-backed support memory | Lockups, metadata |
 | Category | Discord support copilot | Search, directories |
 
@@ -352,3 +352,8 @@ Typefaces: [Space Grotesk](https://fonts.google.com/specimen/Space+Grotesk),
 
 Logo, mark and wordmark are part of the ThreadSherpa project. The Apache-2.0 licence covers the
 code; the marks may be used to refer to the project, not to imply endorsement.
+
+
+## Current product copy
+
+Primary tagline: **Answer once. Help the next person.** The existing amber trail mark and ThreadSherpa name are retained. The new `svg/readme-header.svg` uses the current positioning. Earlier social-card exports still carry the previous tagline.

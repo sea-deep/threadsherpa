@@ -18,7 +18,11 @@ export class MemoryRetriever {
   ) {}
 
   async search(guildId: string, query: string, limit: number = 5): Promise<HybridSearchResult> {
-    logger.debug({ guildId, query }, 'Initiating hybrid memory search');
+    logger.debug({ guildId }, 'Initiating hybrid memory search');
+
+    // An exact question can skip embedding retrieval; answering still uses the LLM.
+    const exact = await this.knowledgeRepo.searchExact(guildId, query);
+    if (exact.length) return { knowledge: exact.slice(0, limit), similarCases: [] };
 
     // Generate embedding for query
     let queryEmbedding: number[] | null = null;

@@ -1,0 +1,146 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base
+  title="Security | ThreadSherpa"
+  description="ThreadSherpa's support boundaries: opted-in channels, explicit knowledge saves, bounded lookup tools, and what moderators remain responsible for."
+>
+  <header class="page-hero">
+    <div class="wrap page-hero__inner">
+      <p class="kicker">Security boundaries</p>
+      <h1>Helpful is not the same as trusted.</h1>
+      <p class="page-hero__lede">
+        ThreadSherpa narrows what can become memory, what can be looked up, and who can change it.
+        These boundaries are part of the product, not a promise that generated answers are always
+        correct.
+      </p>
+      <div class="page-hero__actions">
+        <a class="btn btn--primary" href="/setup/">Read the setup guide</a>
+        <a class="btn btn--ghost" href="/#how-it-works">How it works</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-body">
+    <div class="wrap guide-layout">
+      <aside class="guide-toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ol>
+          <li><a href="#channels">Opted-in channels</a></li>
+          <li><a href="#memory">Explicit memory</a></li>
+          <li><a href="#tools">Bounded tools</a></li>
+          <li><a href="#people">Human review</a></li>
+          <li><a href="#providers">Model providers</a></li>
+          <li><a href="#data">Stored data</a></li>
+          <li><a href="#limits">What remains fallible</a></li>
+        </ol>
+      </aside>
+
+      <article class="prose">
+        <section id="channels">
+          <h2>Only opted-in channels</h2>
+          <p>
+            ThreadSherpa monitors only support channels a moderator connects. Forum posts use
+            their parent channel configuration. <code>/ask</code> is an explicit request and can
+            work elsewhere in the server.
+          </p>
+          <p>
+            The application reads new events. It does not backfill historical posts, and it does not
+            silently turn an existing archive into a knowledge base.
+          </p>
+        </section>
+
+        <section id="memory">
+          <h2>Only explicit saves become knowledge</h2>
+          <p>
+            Ordinary conversation never becomes approved knowledge automatically. A moderator
+            saves a specific reply through the native message action or <code>/teach</code>. The
+            selected facts become reusable guidance for that server. Saving does not post a reply
+            into the old conversation.
+          </p>
+          <p>
+            Saving, correcting, removing, setup, and <code>/queue</code> require Discord
+            Administrator or a configured moderator role. An empty moderator-role list does not
+            authorize ordinary members. Outcome buttons require the original asker or a moderator.
+          </p>
+        </section>
+
+        <section id="tools">
+          <h2>Bounded lookup, not an agent with keys</h2>
+          <p>
+            Models and fetched text cannot execute arbitrary tools. The only lookup tools are
+            reviewed knowledge and exact moderator-selected source pages. The fetcher enforces
+            domain and SSRF checks, redirect limits, and response limits. Broad web search, GitHub
+            publishing, and incident actions are not part of the support path.
+          </p>
+          <p>
+            Citation validation establishes where an answer came from. It does not prove that the
+            generated sentence is factually entailed by the source. Read the reply and inspect the
+            source before trusting it.
+          </p>
+        </section>
+
+        <section id="people">
+          <h2>Quiet is a valid answer</h2>
+          <p>
+            Unsupported questions wait for a moderator instead of receiving a public filler
+            message. Need help and the quiet queue do not DM or page staff, and they do not promise
+            a response time. Questions are never automatically merged. A clear confirmation from
+            the asker can mark the case resolved; uncertain replies stay open.
+          </p>
+          <p>
+            Sensitive account operations, payments, and visible credential assignments take a
+            private human-support path before model or web calls. This is a bounded pattern check,
+            not a guarantee that every secret or sensitive request is detected.
+          </p>
+        </section>
+
+        <section id="providers">
+          <h2>Where the question goes</h2>
+          <p>
+            With Ollama, the synthesis request stays on the machine running the bot. Local
+            embeddings also run through Ollama. Discord, MongoDB Atlas, selected documentation
+            pages, and optional Sentry still use network services.
+          </p>
+          <p>
+            Paper mode sends synthesis questions and supporting evidence to Paper Instruments.
+            Review a provider's data handling before operating with real community data. Provider
+            credentials belong in server-side environment variables, never in browser code,
+            screenshots, commits, or this website.
+          </p>
+        </section>
+
+        <section id="data">
+          <h2>What the bot stores</h2>
+          <p>
+            The bot stores support text, requester IDs, evidence, reviewed answers, versions,
+            reviews, and audit records in MongoDB. There is no automatic retention or
+            privacy-erasure job. Removing a saved answer stops future replies from using it, but it
+            does not erase historical records or messages already posted.
+          </p>
+          <p>
+            Sentry spans intentionally contain operation metadata and numeric usage rather than
+            message bodies. Logs and SDK error behavior still require review before production use.
+            Keep <code>.env</code> out of version control, screenshots, and submissions.
+          </p>
+        </section>
+
+        <section id="limits">
+          <h2>What remains fallible</h2>
+          <ul>
+            <li>Generated prose can be wrong even when the source was retrieved correctly.</li>
+            <li>Prompt-injection checks are bounded heuristics, not a complete defense.</li>
+            <li>Semantic duplicate detection can miss a near-duplicate answer.</li>
+            <li>Permissions depend on the Discord setup; review channel overrides.</li>
+            <li>No automatic job erases historical data after a knowledge removal.</li>
+          </ul>
+          <p>
+            The project is independent and self-hosted. The operator remains responsible for the
+            server, the data, the model provider, and the people using it.
+          </p>
+        </section>
+      </article>
+    </div>
+  </div>
+</Base>

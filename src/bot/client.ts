@@ -1,5 +1,6 @@
 import {
   Client,
+  Events,
   GatewayIntentBits,
   Partials,
   Interaction,
@@ -12,31 +13,31 @@ import { logger } from '../utils/logger.js';
 
 export interface BotClientOptions {
   token: string;
-  clientId: string;
+  clientId?: string;
   devGuildId?: string;
   router: BotInteractionRouter;
 }
 
 export function createBotClient(options: BotClientOptions): Client {
   const client = new Client({
+    allowedMentions: { parse: [], repliedUser: false },
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
-      GatewayIntentBits.GuildMessageReactions,
     ],
-    partials: [Partials.Message, Partials.Channel, Partials.Reaction],
+    partials: [Partials.Message, Partials.Channel],
   });
 
-  client.once('ready', async (c) => {
+  client.once(Events.ClientReady, async (c) => {
     logger.info({ tag: c.user.tag, id: c.user.id }, 'ThreadSherpa Discord bot connected and ready');
 
     // Register commands on ready
     try {
       await registerCommands({
         token: options.token,
-        clientId: options.clientId,
-        guildId: options.devGuildId,
+        clientId: c.application.id,
+        guildId: options.devGuildId || (c.guilds.cache.size === 1 ? c.guilds.cache.first()?.id : undefined),
       });
     } catch (err) {
       logger.warn({ err }, 'Command auto-registration failed during startup');
@@ -47,13 +48,21 @@ export function createBotClient(options: BotClientOptions): Client {
     try {
       if (interaction.isChatInputCommand()) {
         await options.router.handleCommand(interaction);
+      } else if (interaction.isMessageContextMenuCommand()) {
+        await options.router.handleContextMenu(interaction);
+      } else if (interaction.isModalSubmit()) {
+        await options.router.handleModal(interaction);
+      } else if (interaction.isStringSelectMenu()) {
+        await options.router.handleSelect(interaction);
       } else if (interaction.isButton()) {
         await options.router.handleButton(interaction);
       }
     } catch (err) {
       logger.error({ err, interactionId: interaction.id }, 'Unhandled error in interaction handler');
-      if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-        await interaction.reply({ content: 'An unexpected internal error occurred while processing this interaction.', ephemeral: true }).catch(() => {});
+      if (interaction.isRepliable() && interaction.deferred) {
+        await interaction.editReply({ content: 'Couldn’t finish. Try again.' }).catch(() => {});
+      } else if (interaction.isRepliable() && !interaction.replied) {
+        await interaction.reply({ content: 'Couldn’t finish. Try again.', ephemeral: true }).catch(() => {});
       }
     }
   });

@@ -1,7 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import dns from 'node:dns/promises';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { validateUrl, isPrivateIp } from '../../src/security/ssrf.js';
 
 describe('SSRF Protection Guard', () => {
+  beforeEach(() => { vi.spyOn(dns, 'lookup').mockResolvedValue([{ address: '8.8.8.8', family: 4 }] as any); });
+  afterEach(() => vi.restoreAllMocks());
   it('identifies private IP addresses', () => {
     expect(isPrivateIp('127.0.0.1')).toBe(true);
     expect(isPrivateIp('10.0.0.1')).toBe(true);

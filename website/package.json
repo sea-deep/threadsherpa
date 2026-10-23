@@ -1,0 +1,28 @@
+{
+  "name": "threadsherpa-website",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "dev:all": "concurrently -k -n api,web -c yellow,cyan \"npm:dev --prefix ../sandbox-api\" \"astro dev\""
+  },
+  "dependencies": {
+    "@skyra/discord-components-core": "^4.0.2",
+    "astro": "^7.4.2",
+    "gsap": "^3.13.0",
+    "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@types/three": "^0.180.0",
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.2"
+  },
+  "engines": {
+    "node": ">=22.23.4"
+  }
+}

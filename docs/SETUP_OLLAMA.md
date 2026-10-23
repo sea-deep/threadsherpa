@@ -1,69 +1,25 @@
-# Local Open-Weight Model Setup Guide (Ollama)
+# Local reasoning and embeddings
 
-ThreadSherpa is engineered to run completely on local open-weight models using [Ollama](https://ollama.com). It does not require paid proprietary model APIs for core reasoning, embedding generation, or structured tool calling.
-
----
-
-## 1. Install Ollama
-
-### macOS
-```bash
-brew install ollama
-brew services start ollama
-```
-
-### Linux
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
-```
-
-### Windows
-Download the Windows installer from [ollama.com/download](https://ollama.com/download).
-
----
-
-## 2. Pull Recommended Models
-
-ThreadSherpa uses two models:
-1. **Instruction & Structured Reasoning Model**: `gemma4:e4b-it-qat` (or `gemma4:12b`)
-2. **Semantic Embedding Model**: `embeddinggemma-2:270m`
-
-Execute the following commands in your terminal:
+Install [Ollama](https://ollama.com), then pull:
 
 ```bash
-# Pull reasoning model (7.5B Q4_0, context 131k, tool-capable)
 ollama pull gemma4:e4b-it-qat
-
-# Pull embedding model (768-dimensional embeddings)
 ollama pull embeddinggemma-2:270m
 ```
 
----
+These are the defaults. Set `OLLAMA_MODEL` and `OLLAMA_EMBEDDING_MODEL` to models available in `ollama list` if your machine needs a different size. The [Gemma library](https://ollama.com/library/gemma4) and [EmbeddingGemma 2 library](https://ollama.com/library/embeddinggemma-2) document available variants.
 
-## 3. Verify Local Ollama Installation
-
-Test that Ollama is responding locally on port 11434:
+Start Ollama, then:
 
 ```bash
-# Check installed models
-curl -s http://localhost:11434/api/tags
-
-# Test embedding generation
-curl -s http://localhost:11434/api/embeddings -d '{
-  "model": "embeddinggemma-2:270m",
-  "prompt": "Test embedding generation"
-}'
+npm run test:live
+npm run demo:live
 ```
 
----
+The live tests check model availability, a real embedding response, and schema-validated generation. Structured output includes a JSON shape hint and one repair attempt. Small models can still misunderstand a question or return an unhelpful answer even when the JSON validates.
 
-## 4. Configure ThreadSherpa Environment
+Embeddings use `/api/embed`. When that endpoint fails, the provider returns an empty vector and the retriever uses keywords. Generated stand-in vectors are never mixed into the semantic index.
 
-Set the following variables in your `.env` file:
+Keep reasoning and embeddings on the same configured model versions while evaluating. If you switch embedding models, regenerate stored embeddings; a matching dimension alone does not make two embedding spaces compatible. The supplied Atlas index expects 768 dimensions.
 
-```env
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=gemma4:e4b-it-qat
-OLLAMA_EMBEDDING_MODEL=embeddinggemma-2:270m
-OLLAMA_TIMEOUT_MS=60000
-```
+Local inference needs no per-call model API fee. It still uses hardware, memory, electricity, and time. Discord and optional hosted services still use the network. The complete Discord bot does not operate offline.

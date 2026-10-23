@@ -1,5 +1,6 @@
 import { AppConfig } from '../../config/env.js';
 import { ModelProvider } from './model-provider.interface.js';
+import { PaperProvider } from './paper.provider.js';
 import { OllamaProvider } from './ollama.provider.js';
 import { OpenAICompatibleProvider } from './openai.provider.js';
 import { logger } from '../../utils/logger.js';
@@ -8,18 +9,13 @@ export function createModelProvider(config: AppConfig): ModelProvider {
   switch (config.MODEL_PROVIDER) {
     case 'paper':
     case 'paperinstruments': {
-      const apiKey = config.PAPER_INSTRUMENTS_API_KEY || config.PAPERINSTRUMENTS_API_KEY || config.OPENAI_API_KEY || '';
-      const baseUrl = config.OPENAI_BASE_URL || 'https://api.paperinstruments.com/v1';
-      const model = config.PAPER_MODEL || config.OPENAI_MODEL || 'ultramarine-1-flash';
-      const embeddingModel = config.OPENAI_EMBEDDING_MODEL || 'text-embedding-3-small';
-
-      logger.info({ provider: 'Paper Instruments', model, baseUrl }, 'Initializing Paper Instruments Ultramarine model provider');
-      return new OpenAICompatibleProvider({
-        apiKey,
-        baseUrl,
-        model,
-        embeddingModel,
-        defaultTimeoutMs: config.OLLAMA_TIMEOUT_MS,
+      return new PaperProvider({
+        apiKey: config.PAPER_INSTRUMENTS_API_KEY || config.PAPERINSTRUMENTS_API_KEY,
+        model: config.PAPER_MODEL, reasoningEffort: config.PAPER_REASONING_EFFORT,
+        maxCompletionTokens: config.PAPER_MAX_COMPLETION_TOKENS,
+        localModel: config.OLLAMA_MODEL,
+        localProvider: new OllamaProvider({ baseUrl: config.OLLAMA_BASE_URL, model: config.OLLAMA_MODEL,
+          embeddingModel: config.OLLAMA_EMBEDDING_MODEL, defaultTimeoutMs: config.OLLAMA_TIMEOUT_MS }),
       });
     }
 

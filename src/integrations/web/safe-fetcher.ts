@@ -22,7 +22,8 @@ export class SafeFetcher {
   constructor(private defaultAllowedDomains: string[] = []) {}
 
   async fetchPage(urlStr: string, allowedDomains?: string[]): Promise<FetchedWebDocument> {
-    const domains = allowedDomains && allowedDomains.length > 0 ? allowedDomains : this.defaultAllowedDomains;
+    const domains = allowedDomains ?? this.defaultAllowedDomains;
+    if (!domains.length) throw new Error('No documentation domains configured for this server');
     const validation = await validateUrl(urlStr, domains);
     if (!validation.safe || !validation.url) {
       throw new Error(`SSRF guard blocked fetch: ${validation.reason}`);
@@ -38,19 +39,29 @@ export class SafeFetcher {
           'Accept': 'text/html,application/xhtml+xml,text/plain',
         },
         signal: controller.signal,
+        redirect: 'error', // Redirect targets have not passed the allowlist and DNS checks.
       });
-
-      clearTimeout(timeout);
 
       if (!response.ok) {
         throw new Error(`Failed to fetch ${urlStr}: HTTP ${response.status} ${response.statusText}`);
       }
 
       const contentType = response.headers.get('content-type') || '';
-      const rawText = await response.text();
-
-      // Enforce 256KB cap
-      const truncated = rawText.slice(0, 262144);
+      if (!response.body) throw new Error('Documentation response has no body');
+      const reader = response.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let bytes = 0;
+      try {
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          bytes += value.byteLength;
+          if (bytes > 262144) throw new Error('Documentation response exceeds 256KB');
+          chunks.push(value);
+        }
+      } finally { await reader.cancel().catch(() => {}); }
+      const truncated = Buffer.concat(chunks).toString('utf8');
+      clearTimeout(timeout);
 
       let title = '';
       let cleanText = '';
@@ -58,10 +69,10 @@ export class SafeFetcher {
       if (contentType.includes('text/html') || truncated.includes('<html')) {
         const $ = cheerio.load(truncated);
 
+        title = $('title').text().trim() || $('h1').first().text().trim() || validation.url.hostname;
         // Strip non-content tags
         $('script, style, noscript, nav, footer, iframe, svg, head').remove();
 
-        title = $('title').text().trim() || $('h1').first().text().trim() || validation.url.hostname;
         cleanText = $('body').text().replace(/\s+/g, ' ').trim();
       } else {
         title = validation.url.pathname.split('/').pop() || validation.url.hostname;

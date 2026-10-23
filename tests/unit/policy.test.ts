@@ -35,7 +35,7 @@ describe('ResponsePolicy & Confidence Calibration', () => {
     );
 
     expect(result.action).toBe('escalate');
-    expect(result.finalAnswer).toContain('human support administrator');
+    expect(result.finalAnswer).toContain('private support');
   });
 
   it('forces escalation when model explicitly requests escalation', () => {
@@ -56,7 +56,7 @@ describe('ResponsePolicy & Confidence Calibration', () => {
     expect(result.action).toBe('escalate');
   });
 
-  it('triggers clarification question when model requires more user facts', () => {
+  it('quietly queues speculative clarification without a conditional reviewed answer', () => {
     const result = policy.evaluate(
       {
         can_answer_confidently: false,
@@ -71,8 +71,8 @@ describe('ResponsePolicy & Confidence Calibration', () => {
       mockEvidence
     );
 
-    expect(result.action).toBe('clarify');
-    expect(result.finalAnswer).toContain('Which version of Node.js');
+    expect(result.action).toBe('queue');
+    expect(result.finalAnswer).not.toContain('Which version of Node.js');
   });
 
   it('verifies citations against retrieved evidence and rejects fabricated URLs', () => {
@@ -105,4 +105,11 @@ describe('ResponsePolicy & Confidence Calibration', () => {
     expect(result.verifiedCitations.length).toBe(1);
     expect(result.verifiedCitations[0].source_url).toBe('https://nodejs.org/api/sqlite.html');
   });
+  it('asks a focused question only when a scoped reviewed answer matches the question', () => {
+    const draft = { can_answer_confidently: false, answer: '', citations: [{ source_url: 'memory:scoped', excerpt: 'Use the Autumn signup.', relevance: 'Scope' }], requires_clarification: true, clarification_question: 'Do you mean the Autumn sprint?', escalate_to_human: false, escalation_reason: null };
+    const evidence: CaseEvidence = { ...mockEvidence[0], source_type: 'memory', source_url: 'memory:scoped', metadata: { question_match: 1, applies_when: 'Autumn sprint only' } };
+    expect(policy.evaluate(draft, 'How do I join the sprint?', [evidence]).action).toBe('clarify');
+    expect(policy.evaluate(draft, 'How do I claim a badge?', [{ ...evidence, metadata: { ...evidence.metadata, question_match: 0.2 } }]).action).toBe('queue');
+  });
+
 });

@@ -7,6 +7,7 @@ import {
   KnowledgeAuthority,
   KnowledgeStatus,
 } from '../../domain/knowledge.js';
+import { isCurrentKnowledge, lexicalScore, normalizeQuestion, searchTokens } from '../../memory/matching.js';
 import { cosineSimilarity } from '../../utils/math.js';
 import { logger } from '../../utils/logger.js';
 
@@ -29,13 +30,16 @@ export class KnowledgeRepository {
     knowledge_id: string;
     guild_id: string;
     question_patterns: string[];
+    question_context?: string | null;
     canonical_answer: string;
     applies_when?: string | null;
     does_not_apply_when?: string | null;
     authority?: KnowledgeAuthority;
     source_refs?: string[];
+    origin_case_id?: string | null;
     embedding?: number[] | null;
     created_by: string;
+    expires_at?: string | null;
   }): Promise<KnowledgeItem> {
     const now = new Date().toISOString();
     const candidate: KnowledgeItem = {
@@ -43,13 +47,16 @@ export class KnowledgeRepository {
       guild_id: item.guild_id,
       current_version: 1,
       question_patterns: item.question_patterns,
+      question_context: item.question_context || null,
       canonical_answer: item.canonical_answer,
       applies_when: item.applies_when || null,
       does_not_apply_when: item.does_not_apply_when || null,
       authority: item.authority || 'approved_admin',
       approval_status: 'candidate',
       source_refs: item.source_refs || [],
+      origin_case_id: item.origin_case_id || null,
       embedding: item.embedding || null,
+      expires_at: item.expires_at || null,
       created_by: item.created_by,
       created_at: now,
       updated_at: now,
@@ -64,6 +71,7 @@ export class KnowledgeRepository {
       version: 1,
       canonical_answer: candidate.canonical_answer,
       question_patterns: candidate.question_patterns,
+      question_context: candidate.question_context,
       applies_when: candidate.applies_when,
       does_not_apply_when: candidate.does_not_apply_when,
       evidence_refs: candidate.source_refs,
@@ -84,14 +92,15 @@ export class KnowledgeRepository {
 
   async approve(knowledgeId: string, reviewerId: string, decisionNotes?: string): Promise<KnowledgeItem | null> {
     const existing = await this.get(knowledgeId);
-    if (!existing) return null;
+    if (!existing || !['candidate', 'pending_review'].includes(existing.approval_status)) return null;
 
     const now = new Date().toISOString();
-    await this.collection.updateOne(
-      { knowledge_id: knowledgeId },
+    const claimed = await this.collection.updateOne(
+      { knowledge_id: knowledgeId, approval_status: existing.approval_status },
       { $set: { approval_status: 'approved', verified_at: now, updated_at: now } }
     );
 
+    if (!claimed.modifiedCount) return null;
     await this.versionsCollection.updateOne(
       { knowledge_id: knowledgeId, version: existing.current_version },
       { $set: { approval_state: 'approved', reviewer_id: reviewerId } }
@@ -113,14 +122,15 @@ export class KnowledgeRepository {
 
   async reject(knowledgeId: string, reviewerId: string, decisionNotes?: string): Promise<KnowledgeItem | null> {
     const existing = await this.get(knowledgeId);
-    if (!existing) return null;
+    if (!existing || !['candidate', 'pending_review'].includes(existing.approval_status)) return null;
 
     const now = new Date().toISOString();
-    await this.collection.updateOne(
-      { knowledge_id: knowledgeId },
+    const claimed = await this.collection.updateOne(
+      { knowledge_id: knowledgeId, approval_status: existing.approval_status },
       { $set: { approval_status: 'rejected', updated_at: now } }
     );
 
+    if (!claimed.modifiedCount) return null;
     const rev: KnowledgeReview = {
       review_id: `rev_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       knowledge_id: knowledgeId,
@@ -149,7 +159,7 @@ export class KnowledgeRepository {
     reviewerId: string
   ): Promise<KnowledgeItem | null> {
     const existing = await this.get(knowledgeId);
-    if (!existing) return null;
+    if (!existing || existing.approval_status !== 'approved') return null;
 
     const nextVersion = existing.current_version + 1;
     const now = new Date().toISOString();
@@ -158,7 +168,7 @@ export class KnowledgeRepository {
     const applies = correction.applies_when !== undefined ? correction.applies_when : existing.applies_when;
     const doesNotApply = correction.does_not_apply_when !== undefined ? correction.does_not_apply_when : existing.does_not_apply_when;
     const sources = correction.source_refs || existing.source_refs;
-    const embedding = correction.embedding !== undefined ? correction.embedding : existing.embedding;
+    const embedding = correction.embedding ?? null;
 
     // Mark previous version superseded
     await this.versionsCollection.updateOne(
@@ -215,42 +225,36 @@ export class KnowledgeRepository {
     return res.modifiedCount > 0;
   }
 
+  async searchExact(guildId: string, query: string): Promise<ScoredKnowledgeItem[]> {
+    const normalized = normalizeQuestion(query);
+    if (!normalized) return [];
+    return (await this.getApproved(guildId))
+      .filter(item => item.question_patterns.some(p => normalizeQuestion(p) === normalized))
+      .map(item => ({ ...item, similarity: 1, retrieval_method: 'exact' as const }));
+  }
+
   async searchLexical(guildId: string, query: string, limit: number = 5): Promise<ScoredKnowledgeItem[]> {
+    const tokens = searchTokens(query);
+    if (!tokens.length) return [];
+    let docs;
     try {
-      const docs = await this.collection.find({
-        guild_id: guildId,
-        approval_status: 'approved',
-        $text: { $search: query },
-      }, {
-        projection: { score: { $meta: 'textScore' } },
-      })
-      .sort({ score: { $meta: 'textScore' } })
-      .limit(limit)
-      .toArray();
-
-      return docs.map(doc => ({
-        ...this.mapDoc(doc as Record<string, unknown>),
-        similarity: Math.min(1.0, (Number((doc as Record<string, unknown>).score) || 1) / 5),
-        retrieval_method: 'lexical',
-      }));
+      docs = await this.collection.find({
+        guild_id: guildId, approval_status: 'approved', $text: { $search: tokens.join(' ') },
+      }).toArray();
     } catch {
-      // Regex fallback if text index is not configured or in memory
-      const regex = new RegExp(query.split(/\s+/).slice(0, 3).join('|'), 'i');
-      const docs = await this.collection.find({
-        guild_id: guildId,
-        approval_status: 'approved',
-        $or: [
-          { question_patterns: { $regex: regex } },
-          { canonical_answer: { $regex: regex } },
-        ],
-      }).limit(limit).toArray();
-
-      return docs.map((doc, idx) => ({
-        ...this.mapDoc(doc as Record<string, unknown>),
-        similarity: Math.max(0.1, 1 - idx * 0.15),
-        retrieval_method: 'lexical',
-      }));
+      // Escaping prevents a member's search from becoming a regular expression.
+      const escaped = tokens.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+      const regex = new RegExp(escaped.join('|'), 'i');
+      docs = await this.collection.find({
+        guild_id: guildId, approval_status: 'approved',
+        $or: [{ question_patterns: { $regex: regex } }, { canonical_answer: { $regex: regex } }],
+      }).toArray();
     }
+    return docs.map(doc => this.mapDoc(doc as Record<string, unknown>))
+      .filter(isCurrentKnowledge)
+      .map(item => ({ ...item, similarity: lexicalScore(query, item), retrieval_method: 'lexical' as const }))
+      .filter(item => item.similarity > 0)
+      .sort((a, b) => b.similarity - a.similarity).slice(0, limit);
   }
 
   async searchVector(guildId: string, queryEmbedding: number[], limit: number = 5, minSimilarity: number = 0.5): Promise<ScoredKnowledgeItem[]> {
@@ -272,6 +276,7 @@ export class KnowledgeRepository {
             },
           },
         },
+        { $set: { score: { $meta: 'vectorSearchScore' } } },
       ];
 
       const cursor = this.collection.aggregate(pipeline);
@@ -279,9 +284,9 @@ export class KnowledgeRepository {
       if (docs.length > 0) {
         return docs.map((doc: Record<string, unknown>) => ({
           ...this.mapDoc(doc),
-          similarity: Number(doc.score || 0.8),
-          retrieval_method: 'vector',
-        }));
+          similarity: Number(doc.score ?? 0),
+          retrieval_method: 'vector' as const,
+        })).filter(item => item.guild_id === guildId && isCurrentKnowledge(item) && item.similarity >= minSimilarity);
       }
     } catch {
       // Standalone MongoDB or local instance: perform in-memory cosine ranking
@@ -298,7 +303,7 @@ export class KnowledgeRepository {
     const scored: ScoredKnowledgeItem[] = [];
     for (const doc of docs) {
       const item = this.mapDoc(doc as Record<string, unknown>);
-      if (!item.embedding) continue;
+      if (!item.embedding || !isCurrentKnowledge(item)) continue;
       const sim = cosineSimilarity(queryEmbedding, item.embedding);
       if (sim >= minSimilarity) {
         scored.push({
@@ -321,7 +326,7 @@ export class KnowledgeRepository {
     for (const item of lexical) {
       map.set(item.knowledge_id, {
         ...item,
-        similarity: item.similarity * 0.5,
+        similarity: item.similarity,
         retrieval_method: 'lexical',
       });
     }
@@ -329,12 +334,12 @@ export class KnowledgeRepository {
     for (const item of vector) {
       const existing = map.get(item.knowledge_id);
       if (existing) {
-        existing.similarity += item.similarity * 0.7;
+        existing.similarity = Math.max(existing.similarity, item.similarity);
         existing.retrieval_method = 'hybrid';
       } else {
         map.set(item.knowledge_id, {
           ...item,
-          similarity: item.similarity * 0.7,
+          similarity: item.similarity,
           retrieval_method: 'vector',
         });
       }
@@ -360,7 +365,7 @@ export class KnowledgeRepository {
       approval_status: 'approved',
     }).sort({ updated_at: -1 }).toArray();
 
-    return docs.map(d => this.mapDoc(d as Record<string, unknown>));
+    return docs.map(d => this.mapDoc(d as Record<string, unknown>)).filter(isCurrentKnowledge);
   }
 
   async getVersions(knowledgeId: string): Promise<KnowledgeVersion[]> {
@@ -390,12 +395,14 @@ export class KnowledgeRepository {
       knowledge_id: String(doc.knowledge_id),
       guild_id: String(doc.guild_id),
       current_version: Number(doc.current_version || 1),
+      question_context: doc.question_context ? String(doc.question_context) : null,
       question_patterns: Array.isArray(doc.question_patterns) ? doc.question_patterns.map(String) : [],
       canonical_answer: String(doc.canonical_answer),
       applies_when: doc.applies_when ? String(doc.applies_when) : null,
       does_not_apply_when: doc.does_not_apply_when ? String(doc.does_not_apply_when) : null,
       authority: doc.authority as KnowledgeAuthority,
       approval_status: doc.approval_status as KnowledgeStatus,
+      origin_case_id: doc.origin_case_id ? String(doc.origin_case_id) : null,
       source_refs: Array.isArray(doc.source_refs) ? doc.source_refs.map(String) : [],
       embedding: Array.isArray(doc.embedding) ? doc.embedding.map(Number) : null,
       created_by: String(doc.created_by),

@@ -7,6 +7,9 @@ export interface InvestigationRunRecord {
   status: 'completed' | 'failed';
   rounds_executed: number;
   tools_called: number;
+  route?: 'memory' | 'research' | 'handoff';
+  model_calls?: number;
+  duration_ms?: number;
   findings_summary?: string | null;
   error_message?: string | null;
   started_at: string;
@@ -51,14 +54,30 @@ export class CaseRepository {
 
   async findActiveCase(channelId: string, threadId?: string): Promise<SupportCase | null> {
     if (threadId) {
-      const doc = await this.collection.findOne({ thread_id: threadId, status: { $ne: 'closed' } });
-      if (doc) return this.mapDoc(doc as Record<string, unknown>);
+      const doc = await this.collection.findOne({ thread_id: threadId, status: { $nin: ['closed', 'resolved'] } });
+      return doc ? this.mapDoc(doc as Record<string, unknown>) : null;
     }
     const doc = await this.collection.findOne(
-      { channel_id: channelId, status: { $nin: ['closed', 'resolved'] } },
+      { channel_id: channelId, thread_id: null, status: { $nin: ['closed', 'resolved'] } },
       { sort: { created_at: -1 } }
     );
     return doc ? this.mapDoc(doc as Record<string, unknown>) : null;
+  }
+
+  async getByMessageId(messageId: string): Promise<SupportCase | null> {
+    const doc = await this.collection.findOne({ message_id: messageId });
+    return doc ? this.mapDoc(doc as Record<string, unknown>) : null;
+  }
+
+  async listWaiting(guildId: string, limit = 50): Promise<SupportCase[]> {
+    const docs = await this.collection.find({ guild_id: guildId, status: { $in: ['new', 'awaiting_admin', 'escalated'] } })
+      .sort({ created_at: 1 }).limit(limit).toArray();
+    return docs.map(d => this.mapDoc(d as Record<string, unknown>));
+  }
+
+  async markAnsweredIfWaiting(caseId: string, answer: string): Promise<void> {
+    await this.collection.updateOne({ case_id: caseId, status: { $in: ['new', 'awaiting_admin', 'escalated'] } },
+      { $set: { status: 'answered', last_answer: answer, updated_at: new Date().toISOString() } });
   }
 
   async updateStatus(caseId: string, status: CaseStatus, outcome?: string): Promise<SupportCase | null> {
@@ -87,6 +106,7 @@ export class CaseRepository {
       {
         $set: {
           status: 'reopened',
+          resolved_at: null,
           resolution_outcome: reason || null,
           updated_at: now,
         },
@@ -102,7 +122,7 @@ export class CaseRepository {
       summary,
       updated_at: now,
     };
-    if (lastAnswer) {
+    if (lastAnswer !== undefined) {
       update.last_answer = lastAnswer;
     }
 
@@ -131,6 +151,15 @@ export class CaseRepository {
     }
   }
 
+  async getImpact(guildId: string): Promise<{ questions: number; reused: number; solved: number; handoffs: number }> {
+    const cases = await this.collection.find({ guild_id: guildId }).toArray();
+    const ids = cases.map(c => String(c.case_id));
+    const runs = ids.length ? await this.runsCollection.find({ case_id: { $in: ids }, route: 'memory', status: 'completed' }).toArray() : [];
+    return { questions: cases.length, reused: new Set(runs.map(r => String(r.case_id))).size,
+      solved: cases.filter(c => c.status === 'resolved').length,
+      handoffs: cases.filter(c => ['escalated', 'awaiting_admin'].includes(String(c.status))).length };
+  }
+
   async recordInvestigationRun(run: InvestigationRunRecord): Promise<void> {
     await this.runsCollection.insertOne({ ...run });
   }
@@ -143,6 +172,9 @@ export class CaseRepository {
       status: d.status as 'completed' | 'failed',
       rounds_executed: Number(d.rounds_executed || 0),
       tools_called: Number(d.tools_called || 0),
+      route: d.route as InvestigationRunRecord['route'],
+      model_calls: Number(d.model_calls || 0),
+      duration_ms: Number(d.duration_ms || 0),
       findings_summary: d.findings_summary ? String(d.findings_summary) : null,
       error_message: d.error_message ? String(d.error_message) : null,
       started_at: String(d.started_at),

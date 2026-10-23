@@ -20,7 +20,7 @@ export function magnitude(a: number[]): number {
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length === 0 || b.length === 0) return 0;
+  if (a.length === 0 || a.length !== b.length || !a.every(Number.isFinite) || !b.every(Number.isFinite)) return 0;
   const magA = magnitude(a);
   const magB = magnitude(b);
   if (magA === 0 || magB === 0) return 0;

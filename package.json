@@ -1,7 +1,7 @@
 {
   "name": "threadsherpa",
   "version": "1.0.0",
-  "description": "Autonomous Discord support copilot with persistent, human-trained memory",
+  "description": "Answer once. Help the next person. Reviewed community answers for Discord.",
   "main": "dist/index.js",
   "type": "module",
   "scripts": {
@@ -13,18 +13,24 @@
     "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit",
-    "seed": "tsx src/database/seed.ts"
+    "seed": "tsx src/database/seed.ts",
+    "demo": "tsx src/demo.ts",
+    "demo:live": "tsx src/demo.ts --live",
+    "test:live": "RUN_LIVE_MODELS=1 vitest run tests/unit/model-provider.test.ts",
+    "demo:paper": "tsx src/demo.ts --paper",
+    "setup": "tsx src/setup.ts",
+    "eval:paper": "tsx src/evaluate.ts --paper",
+    "eval:local": "tsx src/evaluate.ts --local",
+    "verify:atlas": "tsx src/verify-atlas.ts"
   },
   "keywords": [
     "discord",
     "bot",
     "ai",
     "support",
-    "copilot",
     "rag",
     "memory",
-    "ollama",
-    "github"
+    "ollama"
   ],
   "author": "ThreadSherpa Maintainers",
   "license": "Apache-2.0",
@@ -34,6 +40,7 @@
     "discord.js": "^14.18.0",
     "dotenv": "^16.4.7",
     "mongodb": "^7.7.0",
+    "openai": "^7.42.0",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
     "zod": "^3.24.2"
@@ -43,5 +50,8 @@
     "tsx": "^4.19.3",
     "typescript": "^5.7.3",
     "vitest": "^3.0.8"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

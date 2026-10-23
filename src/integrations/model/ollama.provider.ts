@@ -1,3 +1,5 @@
+import { recordModelUsage } from '../../utils/sentry.js';
+import { schemaExamples, ollamaOutputFormat } from '../../agent/schemas.js';
 import { z } from 'zod';
 import { ModelProvider, ModelHealthStatus, TextGenerationOptions, StructuredGenerationOptions } from './model-provider.interface.js';
 import { logger } from '../../utils/logger.js';
@@ -24,13 +26,10 @@ export class OllamaProvider implements ModelProvider {
 
   async healthCheck(): Promise<ModelHealthStatus> {
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 5000);
 
       const response = await fetch(`${this.baseUrl}/api/tags`, {
-        signal: controller.signal,
+        signal: AbortSignal.timeout(5000),
       });
-      clearTimeout(timer);
 
       if (!response.ok) {
         return {
@@ -68,8 +67,6 @@ export class OllamaProvider implements ModelProvider {
 
   async generateText(options: TextGenerationOptions): Promise<string> {
     const timeout = options.timeoutMs || this.defaultTimeoutMs;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout);
 
     const messages = [];
     if (options.systemPrompt) {
@@ -90,20 +87,19 @@ export class OllamaProvider implements ModelProvider {
             num_predict: options.maxTokens ?? 2048,
           },
         }),
-        signal: controller.signal,
+        signal: AbortSignal.timeout(timeout),
       });
 
-      clearTimeout(timer);
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
         throw new Error(`Ollama chat failed with status ${response.status}: ${errorText}`);
       }
 
-      const data = await response.json() as { message?: { content?: string } };
+      const data = await response.json() as { message?: { content?: string }; prompt_eval_count?: number; eval_count?: number };
+      recordModelUsage(data.prompt_eval_count, data.eval_count);
       return data.message?.content || '';
     } catch (err: unknown) {
-      clearTimeout(timer);
       if (err instanceof Error && err.name === 'AbortError') {
         throw new Error(`Ollama request timed out after ${timeout}ms`);
       }
@@ -113,12 +109,10 @@ export class OllamaProvider implements ModelProvider {
 
   async generateStructured<T>(options: StructuredGenerationOptions<T>): Promise<T> {
     const timeout = options.timeoutMs || this.defaultTimeoutMs;
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeout);
 
     const schemaInstruction = `You must return valid, raw JSON conforming to the requested schema.
 Ensure your JSON output uses the exact keys required. Do NOT include markdown formatting or backticks.
-${options.schemaName ? `Schema name: ${options.schemaName}` : ''}`;
+${options.schemaName ? `Schema name: ${options.schemaName}. Required JSON shape: ${JSON.stringify(schemaExamples[options.schemaName] || {})}` : ''}`;
     const fullSystemPrompt = options.systemPrompt
       ? `${options.systemPrompt}\n\n${schemaInstruction}`
       : schemaInstruction;
@@ -135,43 +129,35 @@ ${options.schemaName ? `Schema name: ${options.schemaName}` : ''}`;
         body: JSON.stringify({
           model: this.model,
           messages,
-          format: 'json',
+          format: ollamaOutputFormat(options.schemaName),
           stream: false,
           options: {
             temperature: options.temperature ?? 0.1,
             num_predict: options.maxTokens ?? 2048,
           },
         }),
-        signal: controller.signal,
+        signal: AbortSignal.timeout(timeout),
       });
 
-      clearTimeout(timer);
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
         throw new Error(`Ollama chat failed with status ${response.status}: ${errorText}`);
       }
 
-      const data = await response.json() as { message?: { content?: string } };
+      const data = await response.json() as { message?: { content?: string }; prompt_eval_count?: number; eval_count?: number };
+      recordModelUsage(data.prompt_eval_count, data.eval_count);
       const rawContent = data.message?.content?.trim() || '{}';
 
-      // Parse and validate
+      let validationError: string;
       try {
-        const parsedJson = JSON.parse(rawContent);
-        const validated = options.schema.safeParse(parsedJson);
-        if (validated.success) {
-          return validated.data;
-        }
-
-        logger.warn({ issues: validated.error.issues, rawContent }, 'Structured output validation failed, attempting repair');
-        return await this.repairStructuredOutput(options, rawContent, validated.error.message);
-      } catch (jsonErr: unknown) {
-        logger.warn({ rawContent, err: jsonErr }, 'JSON parse failed, attempting repair');
-        const errMsg = jsonErr instanceof Error ? jsonErr.message : String(jsonErr);
-        return await this.repairStructuredOutput(options, rawContent, errMsg);
-      }
+        const parsed = options.schema.safeParse(JSON.parse(rawContent));
+        if (parsed.success) return parsed.data;
+        validationError = parsed.error.message;
+      } catch (err) { validationError = err instanceof Error ? err.message : 'Invalid JSON'; }
+      logger.warn('Structured output failed validation; attempting one repair');
+      return await this.repairStructuredOutput(options, rawContent, validationError);
     } catch (err: unknown) {
-      clearTimeout(timer);
       if (err instanceof Error && err.name === 'AbortError') {
         throw new Error(`Ollama structured request timed out after ${timeout}ms`);
       }
@@ -190,7 +176,8 @@ ${validationError}
 Previous output:
 ${previousOutput}
 
-Please fix the output and return only valid JSON matching the schema.`;
+Please fix the output and return only valid JSON matching this shape:
+${JSON.stringify(schemaExamples[options.schemaName || ''] || {})}`;
 
     const response = await fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',
@@ -201,68 +188,41 @@ Please fix the output and return only valid JSON matching the schema.`;
           { role: 'system', content: 'You are a JSON repair specialist. Output ONLY raw valid JSON.' },
           { role: 'user', content: repairPrompt },
         ],
-        format: 'json',
+        format: ollamaOutputFormat(options.schemaName),
         stream: false,
-        options: { temperature: 0.05 },
+        options: { temperature: 0.05, num_predict: 2048 },
       }),
+      signal: AbortSignal.timeout(options.timeoutMs || this.defaultTimeoutMs),
     });
 
     if (!response.ok) {
       throw new Error(`JSON repair failed with HTTP ${response.status}`);
     }
 
-    const data = await response.json() as { message?: { content?: string } };
+    const data = await response.json() as { message?: { content?: string }; prompt_eval_count?: number; eval_count?: number };
+      recordModelUsage(data.prompt_eval_count, data.eval_count);
     const repairedText = data.message?.content?.trim() || '{}';
     const parsed = JSON.parse(repairedText);
     return options.schema.parse(parsed);
   }
 
   async generateEmbedding(text: string): Promise<number[]> {
-    const clean = (text || '').trim();
-    if (clean.length === 0) {
-      return this.fallbackEmbedding('empty', 768);
-    }
-
+    const clean = text.trim();
+    if (!clean) return [];
     try {
-      const response = await fetch(`${this.baseUrl}/api/embeddings`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: this.embeddingModel,
-          prompt: clean,
-        }),
+      const response = await fetch(`${this.baseUrl}/api/embed`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: this.embeddingModel, input: clean }),
+        signal: AbortSignal.timeout(10000),
       });
-
-      if (!response.ok) {
-        throw new Error(`Ollama embeddings returned HTTP ${response.status}`);
-      }
-
-      const data = await response.json() as { embedding?: number[]; embeddings?: number[][] };
-      if (Array.isArray(data.embedding) && data.embedding.length > 0) {
-        return data.embedding;
-      }
-      if (Array.isArray(data.embeddings) && Array.isArray(data.embeddings[0])) {
-        return data.embeddings[0];
-      }
-
-      throw new Error('No embedding returned from Ollama');
+      if (!response.ok) throw new Error(`Embedding service returned HTTP ${response.status}`);
+      const data = await response.json() as { embeddings?: number[][] };
+      const vector = data.embeddings?.[0];
+      if (!vector?.length || !vector.every(Number.isFinite)) throw new Error('Invalid embedding');
+      return vector;
     } catch (err) {
-      logger.warn({ err, text: clean.slice(0, 50) }, 'Failed to get embedding from Ollama, using fallback vector');
-      return this.fallbackEmbedding(clean);
+      logger.warn({ err }, 'Embeddings unavailable; using keyword search only');
+      return []; // Never mix fabricated vectors with the real model’s embedding space.
     }
-  }
-
-  private fallbackEmbedding(text: string, dimension: number = 768): number[] {
-    // Deterministic pseudo-embedding for fallback or test environments
-    const vec = new Array(dimension).fill(0);
-    const clean = text.toLowerCase();
-    for (let i = 0; i < clean.length; i++) {
-      const code = clean.charCodeAt(i);
-      const pos = (code * 31 + i) % dimension;
-      vec[pos] += 1;
-    }
-    // Normalize
-    const mag = Math.sqrt(vec.reduce((sum, v) => sum + v * v, 0));
-    return mag > 0 ? vec.map(v => v / mag) : vec;
   }
 }

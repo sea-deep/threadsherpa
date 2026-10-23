@@ -1,3 +1,5 @@
+import { recordModelUsage } from '../../utils/sentry.js';
+import { schemaExamples } from '../../agent/schemas.js';
 import { z } from 'zod';
 import {
   ModelProvider,
@@ -119,8 +121,10 @@ export class OpenAICompatibleProvider implements ModelProvider {
 
       const data = await response.json() as {
         choices?: Array<{ message?: { content?: string } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
 
+      recordModelUsage(data.usage?.prompt_tokens, data.usage?.completion_tokens);
       return data.choices?.[0]?.message?.content?.trim() || '';
     } catch (err) {
       clearTimeout(timer);
@@ -138,7 +142,7 @@ export class OpenAICompatibleProvider implements ModelProvider {
 
     const schemaInstruction = `Respond ONLY with valid JSON conforming to the expected schema.
 Do NOT include markdown block markers (\`\`\`json) or conversational commentary.
-${options.schemaName ? `Schema name: ${options.schemaName}` : ''}`;
+${options.schemaName ? `Schema name: ${options.schemaName}. Required JSON shape: ${JSON.stringify(schemaExamples[options.schemaName] || {})}` : ''}`;
 
     const fullSystemPrompt = options.systemPrompt
       ? `${options.systemPrompt}\n\n${schemaInstruction}`
@@ -175,8 +179,10 @@ ${options.schemaName ? `Schema name: ${options.schemaName}` : ''}`;
 
       const data = await response.json() as {
         choices?: Array<{ message?: { content?: string } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
 
+      recordModelUsage(data.usage?.prompt_tokens, data.usage?.completion_tokens);
       const rawContent = data.choices?.[0]?.message?.content?.trim() || '{}';
 
       try {
@@ -186,10 +192,10 @@ ${options.schemaName ? `Schema name: ${options.schemaName}` : ''}`;
           return validated.data;
         }
 
-        logger.warn({ issues: validated.error.issues, rawContent }, 'Structured validation failed, attempting repair');
+        logger.warn({ issues: validated.error.issues }, 'Structured validation failed, attempting repair');
         return await this.repairStructuredOutput(options, rawContent, validated.error.message);
       } catch (jsonErr) {
-        logger.warn({ rawContent, err: jsonErr }, 'JSON parse failed, attempting repair');
+        logger.warn({ err: jsonErr }, 'JSON parse failed, attempting repair');
         const errMsg = jsonErr instanceof Error ? jsonErr.message : String(jsonErr);
         return await this.repairStructuredOutput(options, rawContent, errMsg);
       }
@@ -249,6 +255,7 @@ Correct all validation errors and output the corrected JSON object now. Output O
 
       const data = await response.json() as {
         choices?: Array<{ message?: { content?: string } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
 
       const repairedContent = data.choices?.[0]?.message?.content?.trim() || '{}';
@@ -263,7 +270,7 @@ Correct all validation errors and output the corrected JSON object now. Output O
 
   async generateEmbedding(text: string): Promise<number[]> {
     if (!text || text.trim() === '') {
-      return this.fallbackEmbedding('empty');
+      return [];
     }
 
     try {
@@ -286,8 +293,8 @@ Correct all validation errors and output the corrected JSON object now. Output O
       clearTimeout(timer);
 
       if (!response.ok) {
-        logger.warn({ status: response.status }, 'Embeddings endpoint failed; using deterministic fallback');
-        return this.fallbackEmbedding(text);
+        logger.warn({ status: response.status }, 'Embeddings endpoint failed; using keyword search only');
+        return [];
       }
 
       const data = await response.json() as {
@@ -299,30 +306,11 @@ Correct all validation errors and output the corrected JSON object now. Output O
         return embedding;
       }
 
-      return this.fallbackEmbedding(text);
+      return [];
     } catch (err) {
-      logger.debug({ err }, 'Error calling cloud embeddings API, falling back to deterministic vector');
-      return this.fallbackEmbedding(text);
+      logger.debug({ err }, 'Error calling cloud embeddings API, using keyword search only');
+      return [];
     }
   }
 
-  private fallbackEmbedding(text: string, dimensions = 768): number[] {
-    const vector = new Array<number>(dimensions).fill(0);
-    const words = text.toLowerCase().split(/\s+/);
-
-    for (let i = 0; i < words.length; i++) {
-      const word = words[i];
-      let hash = 0;
-      for (let j = 0; j < word.length; j++) {
-        hash = (hash << 5) - hash + word.charCodeAt(j);
-        hash |= 0;
-      }
-      const idx = Math.abs(hash) % dimensions;
-      vector[idx] += 1.0;
-    }
-
-    const norm = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
-    if (norm === 0) return vector;
-    return vector.map(v => v / norm);
-  }
 }

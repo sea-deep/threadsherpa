@@ -1,0 +1,11 @@
+{
+  "verifiedAt": "2026-10-23T09:01:46.865Z",
+  "checks": [
+    "Desktop: no overflow; library components; three scroll phases; source preview; resolved state.",
+    "Capture gallery: next, full-size viewer, close, focus restoration.",
+    "Pause control leaves the complete conversation readable.",
+    "Responsive: no horizontal overflow at 320, 390, and 768px.",
+    "Reduced motion: static complete conversation, no canvas animation.",
+    "Existing sandbox: save and new sourced reply still work."
+  ]
+}

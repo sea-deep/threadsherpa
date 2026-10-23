@@ -1,0 +1,20 @@
+{
+  "recordedAt": "2026-10-23T05:05:36.304Z",
+  "provider": "ollama",
+  "synthetic": true,
+  "savedItems": 1,
+  "paraphrasedDuplicateSkipped": true,
+  "results": [
+    {
+      "question": "Where is the event schedule?",
+      "answer": "The event schedule is pinned in the #announcements channel. Discord event timestamps will display in your local timezone.",
+      "generationCalls": 1
+    },
+    {
+      "question": "I am in India. Do I need to convert the session times myself?",
+      "answer": "Discord event timestamps automatically display in your local timezone, so you should not need to convert the session times yourself.",
+      "generationCalls": 1
+    }
+  ],
+  "limitations": "Small synthetic smoke check, not a general accuracy or semantic deduplication guarantee. No Discord messages or paid API calls."
+}

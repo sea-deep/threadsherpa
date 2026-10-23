@@ -95,24 +95,12 @@ export async function ensureMongoIndexes(db: Db): Promise<void> {
     await db.collection('knowledge_versions').createIndex({ version_id: 1 }, { unique: true });
     await db.collection('knowledge_versions').createIndex({ knowledge_id: 1, version: -1 });
 
-    // 6. Incidents
-    await db.collection('incidents').createIndex({ incident_id: 1 }, { unique: true });
-    await db.collection('incidents').createIndex({ guild_id: 1, verification_state: 1 });
-
-    // 7. GitHub Links
-    await db.collection('github_links').createIndex({ link_id: 1 }, { unique: true });
-    await db.collection('github_links').createIndex({ case_id: 1 });
-
-    // 8. Audit Events
-    await db.collection('audit_events').createIndex({ event_id: 1 }, { unique: true });
-    await db.collection('audit_events').createIndex({ guild_id: 1, created_at: -1 });
-
-    // 9. Investigation Runs
     await db.collection('investigation_runs').createIndex({ run_id: 1 }, { unique: true });
-    await db.collection('investigation_runs').createIndex({ case_id: 1, created_at: -1 });
+    await db.collection('investigation_runs').createIndex({ case_id: 1, started_at: -1 });
 
     logger.debug('MongoDB indexes verified successfully');
   } catch (err) {
-    logger.warn({ err }, 'Error ensuring MongoDB indexes (indexes may already exist)');
+    logger.error({ err }, 'Required database indexes could not be verified');
+    throw err;
   }
 }

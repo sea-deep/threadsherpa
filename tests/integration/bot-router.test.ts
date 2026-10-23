@@ -12,18 +12,13 @@ import { GuildConfigRepository } from '../../src/database/repositories/guild-con
 import { CaseRepository } from '../../src/database/repositories/case.repo.js';
 import { EvidenceRepository } from '../../src/database/repositories/evidence.repo.js';
 import { KnowledgeRepository } from '../../src/database/repositories/knowledge.repo.js';
-import { IncidentRepository } from '../../src/database/repositories/incident.repo.js';
-import { GitHubRepository } from '../../src/database/repositories/github.repo.js';
 import { AuditRepository } from '../../src/database/repositories/audit.repo.js';
 import { ModelProvider } from '../../src/integrations/model/model-provider.interface.js';
 import { SafeFetcher } from '../../src/integrations/web/safe-fetcher.js';
-import { GitHubClient } from '../../src/integrations/github/github.client.js';
 import { MemoryRetriever } from '../../src/memory/retriever.js';
 import { LearningPipeline } from '../../src/memory/learner.js';
 import { ToolRegistry } from '../../src/agent/tools.js';
 import { AgentOrchestrator } from '../../src/agent/orchestrator.js';
-import { GitHubCopilot } from '../../src/agent/github-copilot.js';
-import { IncidentDetector } from '../../src/agent/incident-detector.js';
 import { BotInteractionRouter } from '../../src/bot/handlers/router.js';
 
 describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
@@ -32,8 +27,6 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
   let caseRepo: CaseRepository;
   let evidenceRepo: EvidenceRepository;
   let knowledgeRepo: KnowledgeRepository;
-  let incidentRepo: IncidentRepository;
-  let githubRepo: GitHubRepository;
   let auditRepo: AuditRepository;
   let router: BotInteractionRouter;
   let learningPipeline: LearningPipeline;
@@ -53,15 +46,6 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
           does_not_apply_when: null,
           authority: 'approved_admin',
           change_reason: 'Admin verified best practice',
-        };
-      }
-      if (schemaName === 'InvestigationPlan') {
-        return {
-          initial_assessment: 'Investigating Discord 429 rate limit issue',
-          missing_facts: [],
-          planned_actions: [
-            { tool: 'search_knowledge', args: { query: 'Discord rate limit' }, rationale: 'Check knowledge' },
-          ],
         };
       }
       return {
@@ -87,8 +71,6 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
     caseRepo = new CaseRepository(db);
     evidenceRepo = new EvidenceRepository(db);
     knowledgeRepo = new KnowledgeRepository(db);
-    incidentRepo = new IncidentRepository(db);
-    githubRepo = new GitHubRepository(db);
     auditRepo = new AuditRepository(db);
 
     await guildRepo.upsert({
@@ -97,14 +79,13 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
       support_channel_ids: [supportChannelId],
       admin_role_ids: ['role_support_lead'],
       allowed_domains: ['discord.com'],
-      connected_repos: ['sea-deep/threadsherpa'],
+      documentation_urls: [],
     });
 
     const safeFetcher = new SafeFetcher(['discord.com']);
-    const githubClient = new GitHubClient();
     const memoryRetriever = new MemoryRetriever(knowledgeRepo, caseRepo, mockModelProvider);
     learningPipeline = new LearningPipeline(knowledgeRepo, auditRepo, mockModelProvider);
-    const toolRegistry = new ToolRegistry(memoryRetriever, safeFetcher, githubClient, caseRepo, evidenceRepo);
+    const toolRegistry = new ToolRegistry(memoryRetriever, safeFetcher, caseRepo, evidenceRepo);
 
     const orchestrator = new AgentOrchestrator(
       caseRepo,
@@ -116,27 +97,13 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
       6
     );
 
-    const githubCopilot = new GitHubCopilot(
-      caseRepo,
-      evidenceRepo,
-      githubRepo,
-      guildRepo,
-      auditRepo,
-      githubClient,
-      mockModelProvider
-    );
-
-    const incidentDetector = new IncidentDetector(caseRepo, incidentRepo, auditRepo);
-
     router = new BotInteractionRouter(
       guildRepo,
       caseRepo,
       evidenceRepo,
       knowledgeRepo,
       orchestrator,
-      learningPipeline,
-      githubCopilot,
-      incidentDetector
+      learningPipeline
     );
   });
 
@@ -162,8 +129,7 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
         }),
         getRole: vi.fn().mockReturnValue({ id: 'role_new_admin' }),
         getString: vi.fn((name: string) => {
-          if (name === 'allowed_domain') return 'api.github.com';
-          if (name === 'repo') return 'facebook/react';
+          if (name === 'source_url') return 'https://docs.discord.com/developers/intro';
           if (name === 'autonomy_mode') return 'auto';
           return null;
         }),
@@ -177,8 +143,8 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
     const config = await guildRepo.get(guildId);
     expect(config?.support_channel_ids).toContain('chan_new_support');
     expect(config?.admin_role_ids).toContain('role_new_admin');
-    expect(config?.allowed_domains).toContain('api.github.com');
-    expect(config?.connected_repos).toContain('facebook/react');
+    expect(config?.allowed_domains).toContain('docs.discord.com');
+    expect(config?.documentation_urls).toContain('https://docs.discord.com/developers/intro');
     expect(config?.autonomy_mode).toBe('auto');
   });
 
@@ -190,6 +156,7 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
       guildId,
       channelId: supportChannelId,
       id: 'msg_ask_interaction',
+      fetchReply: vi.fn().mockResolvedValue({ id: 'actual-reply-message' }),
       commandName: 'ask',
       user: { id: 'user_david', username: 'david', tag: 'david#0002' },
       member: {
@@ -212,10 +179,11 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
     const activeCase = await caseRepo.findActiveCase(supportChannelId);
     expect(activeCase).toBeDefined();
     expect(activeCase?.requester_id).toBe('user_david');
-    expect(['answered', 'awaiting_user']).toContain(activeCase?.status);
+    expect(activeCase?.message_id).toBe('actual-reply-message');
+    expect(['answered', 'awaiting_user', 'awaiting_admin']).toContain(activeCase?.status);
   });
 
-  it('handles /teach command and creates candidate review card', async () => {
+  it('saves /teach immediately without a second review', async () => {
     const deferReplyMock = vi.fn();
     const editReplyMock = vi.fn();
 
@@ -244,8 +212,10 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
     expect(deferReplyMock).toHaveBeenCalledWith({ ephemeral: true });
     expect(editReplyMock).toHaveBeenCalled();
 
-    const pending = await knowledgeRepo.getPendingCandidates(guildId);
+    const pending = await knowledgeRepo.getApproved(guildId);
     expect(pending.length).toBe(1);
+    expect(await knowledgeRepo.getPendingCandidates(guildId)).toHaveLength(0);
+    expect(editReplyMock).toHaveBeenCalledWith({ content: 'Saved.' });
     expect(pending[0].canonical_answer).toContain('exponential backoff');
   });
 
@@ -268,17 +238,18 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
         permissions: new PermissionsBitField(PermissionsBitField.Flags.Administrator),
         roles: { cache: new Map() },
       },
-      update: updateMock,
+      editReply: updateMock, deferUpdate: vi.fn(), followUp: vi.fn(),
     } as unknown as ButtonInteraction;
 
     await router.handleButton(btnInteraction);
 
     expect(updateMock).toHaveBeenCalled();
     const approved = await knowledgeRepo.get('know_btn_test');
-    expect(approved?.approval_status).toBe('approved');
+    expect(approved?.approval_status).toBe('rejected');
+    expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(1);
   });
 
-  it('triggers admin learning when an admin replies to an active case in a support channel', async () => {
+  it('does not turn ordinary moderator conversation into saved answers', async () => {
     // Create open case
     await caseRepo.create({
       case_id: 'case_user_help',
@@ -309,10 +280,8 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
 
     await router.handleMessage(adminMsg);
 
-    expect(replyMock).toHaveBeenCalled();
-    const pending = await knowledgeRepo.getPendingCandidates(guildId);
-    expect(pending.length).toBe(1);
-    expect(pending[0].canonical_answer).toContain('exponential backoff');
+    expect(replyMock).not.toHaveBeenCalled();
+    expect(await knowledgeRepo.getPendingCandidates(guildId)).toHaveLength(0);
   });
 
   it('ignores messages in channels before one-time setup designates them as support channels', async () => {
@@ -346,6 +315,7 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
     await guildRepo.upsert({
       guild_id: guildId,
       support_channel_ids: [supportChannelId, forumChannelId],
+      autonomy_mode: 'auto',
     });
 
     const threadSendMock = vi.fn().mockResolvedValue(true);
@@ -365,7 +335,7 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
 
     await router.handleThreadCreate(forumThread);
 
-    expect(threadSendMock).toHaveBeenCalled();
+    expect(threadSendMock).not.toHaveBeenCalled();
     const createdCase = await caseRepo.getByThreadId('thread_forum_post_1');
     expect(createdCase).toBeDefined();
     expect(createdCase?.title).toBe('V8 compilation failure with node 26');
@@ -396,7 +366,7 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
       content: 'Here is lsof output: node process 5821 is occupying port 3000',
       author: { id: 'user_dev', bot: false, username: 'dev', tag: 'dev#0001' },
       system: false,
-      channel: { isThread: () => true, parentId: supportChannelId },
+      channel: { id: activeThreadId, isThread: () => true, parentId: supportChannelId },
       member: {
         permissions: new PermissionsBitField(),
         roles: { cache: new Map() },
@@ -418,44 +388,262 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
     const contextEv = evidenceList.find(e => e.source_type === 'discord_message' && e.metadata?.subtype === 'user_context');
     expect(contextEv).toBeDefined();
     expect(contextEv?.excerpt).toContain('node process 5821');
-    expect(reactMock).toHaveBeenCalledWith('📝');
+    expect(replyMock).not.toHaveBeenCalled();
   });
 
-  it('allows manual context updates via /case update_context', async () => {
-    const c = await caseRepo.create({
-      case_id: 'case_manual_update',
-      guild_id: guildId,
-      channel_id: supportChannelId,
-      message_id: 'msg_manual',
-      requester_id: 'user_mark',
-      requester_username: 'mark',
-      category: 'general',
-      title: 'Intermittent 502 bad gateway',
-      status: 'new',
-      summary: 'Getting 502 on nginx',
+  it('blocks an administrator in another server from approving this server’s answer', async () => {
+    await knowledgeRepo.createCandidate({ knowledge_id: 'foreign', guild_id: 'other-server', question_patterns: ['Private question'], canonical_answer: 'Private answer', created_by: 'other-mod' });
+    const reply = vi.fn();
+    await router.handleButton({ guildId, customId: 'approve_know:foreign', user: { id: adminUserId },
+      member: { permissions: new PermissionsBitField(PermissionsBitField.Flags.Administrator), roles: { cache: new Map() } }, reply } as any);
+    expect((await knowledgeRepo.get('foreign'))?.approval_status).toBe('candidate');
+    expect(reply).toHaveBeenCalled();
+  });
+
+  it('allows only the asker or moderator to mark a question solved', async () => {
+    await caseRepo.create({ case_id: 'mine', guild_id: guildId, channel_id: supportChannelId, message_id: 'm', requester_id: 'asker', requester_username: 'asker', category: 'general', title: 'Question', status: 'answered' });
+    const interaction = { guildId, customId: 'solve_case:mine', user: { id: 'stranger' },
+      member: { permissions: new PermissionsBitField(), roles: { cache: new Map() } }, reply: vi.fn(), editReply: vi.fn(), deferUpdate: vi.fn() };
+    await router.handleButton(interaction as any);
+    expect((await caseRepo.get('mine'))?.status).toBe('answered');
+    interaction.user.id = 'asker';
+    await router.handleButton(interaction as any);
+    expect((await caseRepo.get('mine'))?.status).toBe('resolved');
+    expect(interaction.editReply).toHaveBeenCalled();
+  });
+
+  it('does not send unsolicited answers in supervised mode', async () => {
+    const send = vi.fn();
+    await router.handleThreadCreate({ id: 'quiet-thread', guildId, parentId: supportChannelId, ownerId: 'asker', name: 'Question',
+      fetchStarterMessage: vi.fn().mockResolvedValue({ id: 'm', content: 'Question', author: { id: 'asker', username: 'asker' } }), send } as any);
+    expect(send).not.toHaveBeenCalled();
+  });
+
+  it('uses the current channel on first setup without requiring IDs or a moderator role', async () => {
+    const newGuild = 'brand-new-server';
+    const interaction = { guildId: newGuild, channelId: 'first-support', commandName: 'setup',
+      channel: { type: 0, isThread: () => false },
+      user: { id: 'owner', tag: 'owner' },
+      member: { permissions: new PermissionsBitField(PermissionsBitField.Flags.Administrator), roles: { cache: new Map() } },
+      options: { getChannel: vi.fn().mockReturnValue(null), getRole: vi.fn().mockReturnValue(null), getString: vi.fn((key: string) => key === 'autonomy_mode' ? 'auto' : null) },
+      reply: vi.fn() };
+    await router.handleCommand(interaction as any);
+    expect((await guildRepo.get(newGuild))?.support_channel_ids).toEqual(['first-support']);
+    expect((await guildRepo.get(newGuild))?.autonomy_mode).toBe('auto');
+    expect((await guildRepo.get(newGuild))?.admin_role_ids).toEqual([]);
+  });
+
+  it('does not add a channel as a side effect of only changing a moderator role', async () => {
+    const newGuild = 'roles-only';
+    const interaction = { guildId: newGuild, channelId: 'general', commandName: 'setup',
+      channel: { type: 0, isThread: () => false }, user: { id: 'owner', tag: 'owner' },
+      member: { permissions: new PermissionsBitField(PermissionsBitField.Flags.Administrator), roles: { cache: new Map() } },
+      options: { getChannel: vi.fn().mockReturnValue(null), getRole: vi.fn().mockReturnValue({ id: 'mods' }), getString: vi.fn().mockReturnValue(null) }, reply: vi.fn() };
+    await router.handleCommand(interaction as any);
+    expect((await guildRepo.get(newGuild))?.support_channel_ids).toEqual([]);
+  });
+
+  it.each([
+    { name: 'an empty forum selected from a text channel', guild: 'empty-forum-server', explicit: true },
+    { name: 'the parent forum from inside its first post', guild: 'post-forum-server', explicit: false },
+  ])('configures $name and monitors its future posts', async ({ guild, explicit }) => {
+    const forumId = 'support-forum';
+    const interaction = { guildId: guild, channelId: explicit ? 'bot-commands' : 'setup-post', commandName: 'setup',
+      channel: explicit ? { type: 0, isThread: () => false } : { isThread: () => true, parentId: forumId },
+      user: { id: 'owner', tag: 'owner' },
+      member: { permissions: new PermissionsBitField(PermissionsBitField.Flags.Administrator), roles: { cache: new Map() } },
+      options: { getChannel: vi.fn((key: string) => explicit && key === 'channel' ? { id: forumId, type: 15 } : null),
+        getRole: vi.fn().mockReturnValue(null), getString: vi.fn((key: string) => key === 'autonomy_mode' ? 'auto' : null) }, reply: vi.fn() };
+    await router.handleCommand(interaction as any);
+    expect((await guildRepo.get(guild))?.support_channel_ids).toEqual([forumId]);
+    expect(await guildRepo.isSupportChannel(guild, 'future-post', forumId)).toBe(true);
+    expect(await guildRepo.isSupportChannel(guild, 'bot-commands')).toBe(false);
+  });
+
+  const moderator = { permissions: new PermissionsBitField(PermissionsBitField.Flags.Administrator), roles: { cache: new Map() } };
+  it('saves the selected human answer verbatim with its precise message link and original question', async () => {
+    await caseRepo.create({ case_id: 'origin', guild_id: guildId, channel_id: supportChannelId, thread_id: 'forum-post', message_id: 'question-message', requester_id: 'asker', requester_username: 'asker', category: 'question', title: 'Where is the event schedule?', status: 'awaiting_admin' });
+    const interaction = { guildId, channelId: 'forum-post', commandName: 'Save this answer', member: moderator,
+      user: { id: adminUserId }, channel: { id: 'forum-post', parentId: supportChannelId, isThread: () => true },
+      targetMessage: { id: 'answer-message', content: '  The schedule is pinned in #announcements.\nUse Discord timestamps.\n', author: { bot: false }, url: 'https://discord.com/channels/server/forum-post/answer-message' },
+      deferReply: vi.fn(), editReply: vi.fn(), reply: vi.fn() };
+    await router.handleContextMenu(interaction as any);
+    const [draft] = await knowledgeRepo.getApproved(guildId);
+    expect(draft.canonical_answer).toBe(interaction.targetMessage.content);
+    expect(draft.question_patterns[0]).toBe('Where is the event schedule?');
+    expect(draft.source_refs).toEqual([interaction.targetMessage.url]);
+    expect(draft.origin_case_id).toBe('origin');
+    expect(draft.approval_status).toBe('approved');
+    expect((await caseRepo.get('origin'))?.status).toBe('answered');
+  });
+  it('infers the question from a selected existing forum post that predates installation', async () => {
+    const interaction = { guildId, channelId: 'old-post', commandName: 'Save this answer', member: moderator,
+      user: { id: adminUserId }, channel: { id: 'old-post', parentId: supportChannelId, name: 'An older question', isThread: () => true,
+        fetchStarterMessage: vi.fn().mockResolvedValue({ id: 'original', content: 'Original question body', author: { bot: false, id: 'asker', username: 'asker' } }) },
+      targetMessage: { id: 'answer', content: 'The moderator’s original answer.', author: { bot: false }, url: 'https://discord.com/channels/server/old-post/answer' },
+      deferReply: vi.fn(), editReply: vi.fn(), reply: vi.fn() };
+    await router.handleContextMenu(interaction as any);
+    expect((await caseRepo.getByThreadId('old-post'))?.message_id).toBe('original');
+    expect((await knowledgeRepo.getApproved(guildId))[0].question_patterns[0]).toBe('An older question');
+  });
+  it('rejects bot-generated answers and unauthorized context-menu saves', async () => {
+    const interaction = { guildId, commandName: 'Save this answer', member: moderator, user: { id: adminUserId },
+      targetMessage: { content: 'A generated reply', author: { bot: true } }, reply: vi.fn() };
+    await router.handleContextMenu(interaction as any);
+    expect(await knowledgeRepo.getPendingCandidates(guildId)).toHaveLength(0);
+    expect(interaction.reply).toHaveBeenCalled();
+    interaction.member = { permissions: new PermissionsBitField(), roles: { cache: new Map() } };
+    interaction.targetMessage.author.bot = false;
+    await router.handleContextMenu(interaction as any);
+    expect(await knowledgeRepo.getPendingCandidates(guildId)).toHaveLength(0);
+  });
+  it('lets moderators remove incorrect AI question variants without regenerating them', async () => {
+    await knowledgeRepo.createCandidate({ knowledge_id: 'edit-me', guild_id: guildId, question_patterns: ['Schedule?', 'Incorrect suggested question'], canonical_answer: 'Check the announcements channel.', created_by: adminUserId });
+    const interaction = { guildId, channelId: supportChannelId, customId: 'edit_draft:edit-me:v1', member: moderator,
+      user: { id: adminUserId }, fields: { getTextInputValue: (field: string) => ({ question: 'Where is the schedule?', answer: 'Check the announcements channel.', scope: '', days: '7' })[field] },
+      reply: vi.fn(), deferReply: vi.fn(), editReply: vi.fn() };
+    await router.handleModal(interaction as any);
+    const [draft] = await knowledgeRepo.getApproved(guildId);
+    expect(draft.question_patterns).toEqual(['Where is the schedule?']);
+    expect(draft.expires_at).toBeTruthy();
+    expect((await knowledgeRepo.get('edit-me'))?.approval_status).toBe('rejected');
+  });
+  it('quietly queues unsupported text-channel questions without creating empty threads', async () => {
+    await guildRepo.upsert({ guild_id: guildId, autonomy_mode: 'auto' });
+    const message = { id: 'unanswered', guildId, channelId: supportChannelId, content: 'Where do I get a mystery certificate?',
+      author: { id: 'asker', bot: false, username: 'asker' }, channel: { isThread: () => false }, reply: vi.fn(), startThread: vi.fn() };
+    await router.handleMessage(message as any);
+    expect((await caseRepo.getByMessageId('unanswered'))?.status).toBe('awaiting_admin');
+    expect(message.reply).not.toHaveBeenCalled(); expect(message.startThread).not.toHaveBeenCalled();
+  });
+
+  it('quietly queues model failures for new forum posts, text questions, and follow-ups', async () => {
+    await guildRepo.upsert({ guild_id: guildId, autonomy_mode: 'auto' });
+    await knowledgeRepo.createCandidate({ knowledge_id: 'known-failure', guild_id: guildId, question_patterns: ['Where is the schedule?'], canonical_answer: 'The schedule is pinned in announcements.', created_by: adminUserId });
+    await knowledgeRepo.approve('known-failure', adminUserId);
+    const generate = vi.mocked(mockModelProvider.generateStructured);
+    generate.mockRejectedValueOnce(new Error('Model timed out'));
+    const send = vi.fn();
+    await router.handleThreadCreate({ id: 'failed-post', guildId, parentId: supportChannelId, ownerId: 'asker', name: 'Where is the schedule?',
+      fetchStarterMessage: vi.fn().mockResolvedValue({ id: 'failed-starter', content: 'Where is the schedule?', author: { id: 'asker', username: 'asker', bot: false } }), send } as any);
+    const c = (await caseRepo.getByThreadId('failed-post'))!;
+    expect(c.status).toBe('awaiting_admin');
+    expect(send).not.toHaveBeenCalled();
+    expect((await caseRepo.getInvestigationRuns(c.case_id))[0]).toMatchObject({ status: 'failed', error_message: 'Model timed out' });
+
+    const reply = vi.fn();
+    generate.mockRejectedValueOnce(new Error('Model timed out'));
+    await router.handleMessage({ id: 'failed-text', guildId, channelId: supportChannelId, content: 'Where is the schedule?',
+      author: { id: 'asker', username: 'asker', bot: false }, channel: { isThread: () => false }, reply } as any);
+    expect((await caseRepo.getByMessageId('failed-text'))?.status).toBe('awaiting_admin');
+    expect(reply).not.toHaveBeenCalled();
+
+    generate.mockRejectedValueOnce(new Error('Model timed out'));
+    await router.handleMessage({ id: 'failed-followup', guildId, channelId: 'failed-post', content: 'Is that the schedule for today?',
+      url: 'https://discord.com/channels/server/failed-post/failed-followup', author: { id: 'asker', username: 'asker', bot: false },
+      channel: { isThread: () => true, id: 'failed-post', parentId: supportChannelId }, reply } as any);
+    expect((await caseRepo.get(c.case_id))?.status).toBe('awaiting_admin');
+    expect(reply).not.toHaveBeenCalled();
+  });
+
+  it('still acknowledges a failed explicit /ask', async () => {
+    await knowledgeRepo.createCandidate({ knowledge_id: 'explicit-failure', guild_id: guildId, question_patterns: ['Where is the schedule?'], canonical_answer: 'Check announcements for the schedule.', created_by: adminUserId });
+    await knowledgeRepo.approve('explicit-failure', adminUserId);
+    vi.mocked(mockModelProvider.generateStructured).mockRejectedValueOnce(new Error('Model timed out'));
+    const editReply = vi.fn();
+    await router.handleCommand({ guildId, channelId: supportChannelId, commandName: 'ask',
+      user: { id: 'asker', username: 'asker' }, options: { getString: () => 'Where is the schedule?' },
+      fetchReply: vi.fn().mockResolvedValue({ id: 'explicit-reply' }), deferReply: vi.fn(), editReply } as any);
+    expect(editReply).toHaveBeenCalledOnce();
+    expect(editReply.mock.calls[0][0].embeds[0].toJSON().description).toContain('I couldn’t check this.');
+  });
+
+  it('accepts explicit success from the asker without another bot reply or model call', async () => {
+    await caseRepo.create({ case_id: 'conversation-solved', guild_id: guildId, channel_id: supportChannelId, thread_id: 'solved-post', message_id: 'original', requester_id: 'asker', requester_username: 'asker', category: 'question', title: 'Where is the schedule?', status: 'answered', last_answer: 'Read announcements.' });
+    const reply = vi.fn();
+    vi.mocked(mockModelProvider.generateStructured).mockClear();
+    const message = { id: 'confirmation', guildId, channelId: 'solved-post', content: 'That worked, thanks!',
+      author: { id: 'stranger', username: 'stranger' }, channel: { isThread: () => true, parentId: supportChannelId, id: 'solved-post' }, reply };
+    await router.handleMessage(message as any);
+    expect((await caseRepo.get('conversation-solved'))?.status).toBe('answered');
+    message.author.id = 'asker';
+    await router.handleMessage(message as any);
+    expect((await caseRepo.get('conversation-solved'))?.status).toBe('resolved');
+    expect(reply).not.toHaveBeenCalled();
+    expect(mockModelProvider.generateStructured).not.toHaveBeenCalled();
+  });
+
+  it('reopens unhelpful answers quietly and preserves the attempted advice for a moderator', async () => {
+    await guildRepo.upsert({ guild_id: guildId, autonomy_mode: 'auto' });
+    await caseRepo.create({ case_id: 'conversation-failed', guild_id: guildId, channel_id: supportChannelId, thread_id: 'failed-advice-post', message_id: 'original', requester_id: 'asker', requester_username: 'asker', category: 'question', title: 'My project will not start', status: 'resolved', last_answer: 'Install the dependencies and restart.' });
+    vi.mocked(mockModelProvider.generateStructured).mockClear();
+    const reply = vi.fn();
+    await router.handleMessage({ id: 'negative-feedback', guildId, channelId: 'failed-advice-post', content: "That didn't work. I still get an error.", url: 'https://discord.com/channels/server/post/negative-feedback',
+      author: { id: 'asker', username: 'asker' }, channel: { isThread: () => true, parentId: supportChannelId, id: 'failed-advice-post' }, reply } as any);
+    const c = await caseRepo.get('conversation-failed');
+    expect(c?.status).toBe('awaiting_admin');
+    expect(c?.reopen_count).toBe(1);
+    const feedback = (await evidenceRepo.getByCaseId('conversation-failed')).find(e => e.metadata.feedback === 'failed');
+    expect(feedback?.metadata.failed_answer).toBe('Install the dependencies and restart.');
+    expect(reply).not.toHaveBeenCalled();
+    expect(mockModelProvider.generateStructured).not.toHaveBeenCalled();
+  });
+
+  it('groups repeated visible questions and rechecks access when a topic is opened', async () => {
+    for (let n = 0; n < 2; n++) await caseRepo.create({ case_id: `topic-${n}`, guild_id: guildId, channel_id: supportChannelId, thread_id: `topic-post-${n}`, message_id: `topic-msg-${n}`, requester_id: `asker-${n}`, requester_username: `asker-${n}`, category: 'question', title: 'Where is the project submission form?', status: 'awaiting_admin' });
+    const permissions = new PermissionsBitField(PermissionsBitField.Flags.ViewChannel);
+    const fetch = vi.fn().mockResolvedValue({ type: 11, isTextBased: () => true, permissionsFor: () => permissions, send: vi.fn() });
+    const guild = { channels: { fetch }, members: { fetch: vi.fn().mockResolvedValue(moderator), me: moderator } };
+    const command = { guildId, guild, commandName: 'queue', user: { id: adminUserId }, member: moderator, deferReply: vi.fn(), editReply: vi.fn() };
+    await router.handleCommand(command as any);
+    const payload = command.editReply.mock.calls[0][0];
+    expect(payload.content).toBe('2 questions · 1 topic need help.');
+    const menu = payload.components[0].toJSON().components[0];
+    expect(menu.custom_id).toBe('open_queue_topic'); expect(menu.options).toHaveLength(1);
+    const select = { ...command, customId: 'open_queue_topic', values: ['topic-0'], deferReply: vi.fn(), editReply: vi.fn() };
+    await router.handleSelect(select as any);
+    expect(select.editReply.mock.calls[0][0].components[0].toJSON().components[0].options).toHaveLength(2);
+    fetch.mockResolvedValue(null);
+    await router.handleSelect(select as any);
+    expect(select.editReply.mock.calls[1][0].content).toContain('Already handled');
+  });
+
+  it('does not broadcast saved knowledge through old sharing buttons or menus', async () => {
+    await knowledgeRepo.createCandidate({ knowledge_id: 'old-share', guild_id: guildId, question_patterns: ['Schedule?'], canonical_answer: 'Read the pinned post.', created_by: adminUserId });
+    await knowledgeRepo.approve('old-share', adminUserId);
+    const send = vi.fn();
+    const interaction = { guildId, guild: { channels: { fetch: vi.fn().mockResolvedValue({ send }) } }, customId: 'share_know:old-share',
+      user: { id: adminUserId }, member: moderator, reply: vi.fn() };
+    await router.handleButton(interaction as any);
+    await router.handleSelect({ ...interaction, customId: 'share_answers:old-preview', values: ['old-question'] } as any);
+    expect(send).not.toHaveBeenCalled();
+    expect(interaction.reply).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens a valid editable form, including optional empty scope and expiry', async () => {
+    await knowledgeRepo.createCandidate({ knowledge_id: 'modal-open', guild_id: guildId, question_patterns: ['Where is the schedule?'], canonical_answer: 'Read the pinned post.', created_by: adminUserId });
+    const showModal = vi.fn((modal: any) => {
+      const data = modal.toJSON();
+      expect(data.components).toHaveLength(4);
+      expect(data.custom_id).toBe('edit_draft:modal-open:v1');
     });
-
-    const replyMock = vi.fn();
-    const interaction = {
-      guildId,
-      channelId: supportChannelId,
-      commandName: 'case',
-      user: { id: 'user_mark', username: 'mark', tag: 'mark#0003' },
-      channel: { isThread: () => false, parentId: null },
-      options: {
-        getString: vi.fn((name: string) => {
-          if (name === 'case_id') return c.case_id;
-          if (name === 'update_context') return 'Found out backend service was OOM killed by kernel';
-          return null;
-        }),
-      },
-      reply: replyMock,
-    } as unknown as ChatInputCommandInteraction;
-
-    await router.handleCommand(interaction);
-
-    expect(replyMock).toHaveBeenCalled();
-    const updated = await caseRepo.get(c.case_id);
-    expect(updated?.summary).toContain('OOM killed by kernel');
+    await router.handleButton({ guildId, customId: 'edit_draft:modal-open', user: { id: adminUserId }, member: moderator, showModal } as any);
+    expect(showModal).toHaveBeenCalledOnce();
   });
+
+  it('lets a moderator clear one-off queue questions without saving them as reusable knowledge', async () => {
+    await caseRepo.create({ case_id: 'one-off', guild_id: guildId, channel_id: supportChannelId, thread_id: 'post-one-off', message_id: 'original', requester_id: 'asker', requester_username: 'asker', category: 'question', title: 'One-off question', status: 'awaiting_admin' });
+    const permissions = new PermissionsBitField(PermissionsBitField.Flags.ViewChannel);
+    const guild = { channels: { fetch: vi.fn().mockResolvedValue({ type: 11, isTextBased: () => true, isThread: () => true, permissionsFor: () => permissions, send: vi.fn() }) }, members: { fetch: vi.fn().mockResolvedValue(moderator), me: moderator } };
+    const command = { guildId, guild, commandName: 'queue', user: { id: adminUserId }, member: moderator, deferReply: vi.fn(), editReply: vi.fn() };
+    await router.handleCommand(command as any);
+    const select = { guildId, guild, customId: 'open_queue', values: ['one-off'], user: command.user, member: moderator, reply: vi.fn() };
+    await router.handleSelect(select as any);
+    const button = select.reply.mock.calls[0][0].components[0].toJSON().components[1];
+    const interaction = { guildId, guild, customId: button.custom_id, user: command.user, member: moderator, deferUpdate: vi.fn(), editReply: vi.fn() };
+    await router.handleButton(interaction as any);
+    expect((await caseRepo.get('one-off'))?.status).toBe('resolved');
+    expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(0);
+  });
+
 });

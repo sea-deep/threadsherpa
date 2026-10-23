@@ -8,3 +8,12 @@ coverage/
 data/*.sqlite
 data/*.sqlite-wal
 data/*.sqlite-shm
+.local/
+
+# Campfire sandbox secrets
+sandbox-api/.env
+
+# Generated Astro types and local environment variants
+.astro/
+.env.*
+!.env.example

@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="340" viewBox="0 0 1200 340" role="img" aria-labelledby="title desc">
+<title id="title">ThreadSherpa</title><desc id="desc">Answer once. Help the next person. Reviewed answers for Discord communities.</desc>
+<rect width="1200" height="340" rx="24" fill="#0B1017"/>
+<path d="M80 153 L128 121 L176 153 M69 191 L128 151 L187 191 M57 231 L128 183 L199 231" fill="none" stroke="#F2A03D" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="245" y="113" fill="#A7B4BF" font-family="system-ui, sans-serif" font-size="15" letter-spacing="3">REVIEWED ANSWERS FOR DISCORD COMMUNITIES</text>
+<text x="241" y="181" fill="#F5F2EC" font-family="system-ui, sans-serif" font-size="62" font-weight="700" letter-spacing="-2">ThreadSherpa</text>
+<text x="245" y="237" fill="#F5F2EC" font-family="system-ui, sans-serif" font-size="31">Answer once. Help the next person.</text>
+<path d="M245 270H1110" stroke="#263746"/>
+<text x="245" y="302" fill="#A7B4BF" font-family="system-ui, sans-serif" font-size="17">Local models. Moderator review. A little less repeat work.</text>
+</svg>

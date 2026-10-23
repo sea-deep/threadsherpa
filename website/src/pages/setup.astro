@@ -1,0 +1,307 @@
+---
+import Base from '../layouts/Base.astro';
+---
+
+<Base
+  title="Setup | ThreadSherpa"
+  description="Run ThreadSherpa yourself: create a Discord bot, connect MongoDB, choose Ollama or Paper Instruments, and connect one support forum."
+>
+  <header class="page-hero">
+    <div class="wrap page-hero__inner">
+      <p class="kicker">Setup guide</p>
+      <h1>Start with one support channel.</h1>
+      <p class="page-hero__lede">
+        ThreadSherpa runs on your machine or server. You create the Discord application, connect a
+        database, choose a model, and decide where the bot can help. No hosted signup, no shared
+        bot account.
+      </p>
+      <div class="page-hero__actions">
+        <a class="btn btn--primary" href="#connect-forum">Connect a forum</a>
+        <a class="btn btn--ghost" href="/security/">Read the security boundaries</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="page-body">
+    <div class="wrap guide-layout">
+      <aside class="guide-toc" aria-label="On this page">
+        <h2>On this page</h2>
+        <ol>
+          <li><a href="#before">Before you start</a></li>
+          <li><a href="#discord">Create the bot</a></li>
+          <li><a href="#storage">Storage and models</a></li>
+          <li><a href="#env">Configuration</a></li>
+          <li><a href="#check">Check and start</a></li>
+          <li><a href="#connect-forum">Connect a forum</a></li>
+          <li><a href="#save">Save the first answer</a></li>
+          <li><a href="#trouble">If something blocks you</a></li>
+        </ol>
+        <p class="guide-toc__back"><a href="/#how-it-works">Back to the overview</a></p>
+      </aside>
+
+      <article class="prose">
+        <section id="before">
+          <h2>Before you start</h2>
+          <p>
+            You need a project checkout, Node.js 22 or newer, a Discord account, and a database. A
+            local model also needs Ollama and enough memory to run it. Hosted model providers can
+            be used instead, but they receive the questions and evidence used for replies.
+          </p>
+
+          <div class="notice">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <circle cx="8" cy="8" r="6.4" stroke="currentColor" stroke-width="1.3"></circle>
+              <path d="M8 4.6v4.2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path>
+              <circle cx="8" cy="11.6" r="0.9" fill="currentColor"></circle>
+            </svg>
+            <p>
+              <strong>Use your ThreadSherpa checkout.</strong>
+              Repository access is currently required. The bot uses Node.js 22 or newer;
+              building this website needs Node.js 22.23.4 or newer.
+            </p>
+          </div>
+
+          <p>
+            Use a dedicated test server first. Do not import another community's messages,
+            screenshots, or policies as a knowledge base. The bot reads new events in channels you
+            connect; it does not backfill historical posts.
+          </p>
+        </section>
+
+        <section id="discord">
+          <h2>1. Create the Discord bot</h2>
+          <ol>
+            <li>
+              Open the
+              <a class="external" href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer">Discord Developer Portal</a>
+              and create an application. Name it ThreadSherpa.
+            </li>
+            <li>
+              Open <strong>Bot</strong>, reset or copy the bot token, and keep it private. The token
+              goes in <code>DISCORD_BOT_TOKEN</code>. A reset invalidates the previous token.
+            </li>
+            <li>
+              On the Bot page, enable <strong>Message Content Intent</strong>. ThreadSherpa does not
+              request Server Members Intent or Presence Intent.
+            </li>
+            <li>
+              Open <strong>Installation</strong> and enable <strong>Guild Install</strong>. Invite
+              the bot with the <code>bot</code> and <code>applications.commands</code> scopes. It
+              does not need Administrator.
+            </li>
+          </ol>
+          <p>
+            The bot needs View Channels, Read Message History, Send Messages, Send Messages in
+            Threads (or Send Messages in Posts), and Embed Links in the support channel. Thread
+            permissions are inherited from the parent forum, but channel overrides can still block
+            it.
+          </p>
+          <p>
+            Reference:
+            <a class="external" href="https://docs.discord.com/developers/quick-start/getting-started" target="_blank" rel="noopener noreferrer">Discord's bot setup guide</a>
+            and
+            <a class="external" href="https://discord.com/developers/docs/topics/permissions" target="_blank" rel="noopener noreferrer">Discord permissions</a>.
+          </p>
+        </section>
+
+        <section id="storage">
+          <h2>2. Choose storage and a model</h2>
+          <h3>MongoDB</h3>
+          <p>
+            Create a free MongoDB Atlas cluster, a database user, and a network access entry for
+            the machine running the bot. Copy the driver connection string. It looks like
+            <code>mongodb+srv://…</code> and includes the database user and password. Password
+            characters reserved in URLs must be percent-encoded.
+          </p>
+          <ul>
+            <li>
+              <a class="external" href="https://cloud.mongodb.com/" target="_blank" rel="noopener noreferrer">MongoDB Atlas</a>
+            </li>
+            <li>
+              <a class="external" href="https://www.mongodb.com/docs/atlas/tutorial/deploy-free-tier-cluster/" target="_blank" rel="noopener noreferrer">Create a free cluster</a>
+            </li>
+            <li>
+              <a class="external" href="https://www.mongodb.com/docs/atlas/security-add-mongodb-users/" target="_blank" rel="noopener noreferrer">Add a database user</a>
+            </li>
+            <li>
+              <a class="external" href="https://www.mongodb.com/docs/atlas/security/ip-access-list/" target="_blank" rel="noopener noreferrer">Add an IP access entry</a>
+            </li>
+            <li>
+              <a class="external" href="https://www.mongodb.com/docs/atlas/driver-connection/" target="_blank" rel="noopener noreferrer">Get the driver connection string</a>
+            </li>
+          </ul>
+
+          <h3>Local inference with Ollama</h3>
+          <p>
+            Install <a class="external" href="https://ollama.com/download" target="_blank" rel="noopener noreferrer">Ollama</a>
+            and pull the reply model and embedding model named in the project's environment
+            template. Keep Ollama running while the bot is running. Local inference keeps the
+            synthesis request on your machine; Discord and the database still use the network.
+          </p>
+
+          <h3>Paper Instruments</h3>
+          <p>
+            Paper is optional. It uses server-side API credit for synthesis, while local embeddings
+            still run through Ollama. Add its key only on the machine running the bot. Do not put a
+            provider key in browser code, a screenshot, or a commit.
+          </p>
+        </section>
+
+        <section id="env">
+          <h2>3. Configure the environment</h2>
+          <p>
+            Create <code>.env</code> from the project's <code>.env.example</code>. Keep it out of
+            version control. These are the variable names you will see; values are yours and should
+            never be posted publicly.
+          </p>
+
+          <div class="prose-table">
+            <table>
+              <thead>
+                <tr><th>Variable</th><th>Purpose</th></tr>
+              </thead>
+              <tbody>
+                <tr><td><code>DISCORD_BOT_TOKEN</code></td><td>The bot token from the Discord Developer Portal.</td></tr>
+                <tr><td><code>MONGODB_URI</code></td><td>The Atlas driver connection string.</td></tr>
+                <tr><td><code>MONGODB_DB_NAME</code></td><td>Optional database name. The default is <code>threadsherpa</code>.</td></tr>
+                <tr><td><code>MODEL_PROVIDER</code></td><td><code>ollama</code> or <code>paper</code>.</td></tr>
+                <tr><td><code>PAPER_INSTRUMENTS_API_KEY</code></td><td>Only for Paper mode. Optional otherwise.</td></tr>
+                <tr><td><code>DISCORD_DEV_GUILD_ID</code></td><td>Optional test-server ID for immediate command registration.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p>
+            The project's setup checker creates <code>.env</code> only when it does not exist. It
+            never overwrites existing keys. It checks access without posting Discord messages or
+            requesting paid generation.
+          </p>
+        </section>
+
+        <section id="check">
+          <h2>4. Check the configuration and start</h2>
+          <div class="code-block" data-copy-scope>
+            <div class="code-block__bar">
+              <span class="code-block__label">Terminal</span>
+              <button class="copy-btn" type="button" data-copy="npm ci
+npm run setup
+npm run dev">Copy commands</button>
+            </div>
+            <pre><code>npm ci
+npm run setup
+npm run dev</code></pre>
+            <p class="copy-status" role="status" data-copy-status></p>
+          </div>
+          <p>
+            Run the checker after each configuration change. You want Discord, MongoDB, and the
+            chosen models to report OK. The checker prints a ready-to-use invite URL when the
+            Discord token works. Open it, choose your test server, and authorize the bot. For a
+            production process, use <code>npm run build</code> then <code>npm start</code>.
+          </p>
+        </section>
+
+        <section id="connect-forum">
+          <h2>5. Connect the support forum</h2>
+          <p>
+            A forum's top-level view has no normal message composer, so do not run setup there.
+            Run the command from a regular text channel, such as <code>#bot-commands</code>, as a
+            server administrator:
+          </p>
+          <div class="code-block" data-copy-scope>
+            <div class="code-block__bar">
+              <span class="code-block__label">In Discord</span>
+              <button class="copy-btn" type="button" data-copy="/setup channel:#your-forum autonomy_mode:auto">Copy command</button>
+            </div>
+            <pre><code>/setup channel:#your-forum autonomy_mode:auto</code></pre>
+            <p class="copy-status" role="status" data-copy-status></p>
+          </div>
+          <p>
+            Select your actual support forum in the command's <strong>channel</strong> option. This
+            works before the forum has any posts, and you do not repeat it for every question.
+            Commands run in the text channel; the bot connects the selected forum.
+          </p>
+          <p>
+            If you already have a forum post, you can alternatively run
+            <code>/setup autonomy_mode:auto</code> inside that post on first setup; the bot selects
+            its parent forum. For an ordinary text support channel, run
+            <code>/setup autonomy_mode:auto</code> directly in it, or select it with the
+            <strong>channel</strong> option.
+          </p>
+          <p>
+            Automatic replies apply to new posts in the selected forum. Unknown questions wait
+            quietly in <code>/queue</code>. To stop monitoring a forum, run
+            <code>/setup remove_channel:#your-forum</code> from a regular text channel.
+          </p>
+        </section>
+
+        <section id="save">
+          <h2>6. Save the first answer</h2>
+          <ol>
+            <li>Create a synthetic question in a support post.</li>
+            <li>
+              Reply as a moderator, then right-click your answer, open <strong>Apps</strong>, and
+              choose <strong>Save this answer</strong>. You will see <strong>Saved.</strong> or
+              <strong>Already saved.</strong>
+            </li>
+            <li>
+              Ask a new question in different words. When the saved facts support it, ThreadSherpa
+              writes a short reply and links the original answer.
+            </li>
+            <li>
+              Check <code>/queue</code> for questions that were not answered. Use
+              <code>/answers</code> to edit or remove saved guidance, and <code>/teach</code> when
+              there is no existing answer message to save.
+            </li>
+          </ol>
+          <p>
+            A clear “that worked” confirmation closes a case without another bot message. A “that
+            didn't work” reply queues the attempted advice for review. Saving knowledge does not
+            post into older questions.
+          </p>
+        </section>
+
+        <section id="trouble">
+          <h2>If something blocks you</h2>
+          <div class="prose-table">
+            <table>
+              <thead>
+                <tr><th>What you see</th><th>What to check</th></tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Discord token rejected</td>
+                  <td>Use the Bot Token, not the client secret or application ID. If you reset it, update <code>.env</code>.</td>
+                </tr>
+                <tr>
+                  <td>Bot cannot read posts</td>
+                  <td>Enable Message Content Intent on the Bot page, then restart the bot.</td>
+                </tr>
+                <tr>
+                  <td>MongoDB cannot connect</td>
+                  <td>Check the database user, password encoding, and the current IP entry in Atlas.</td>
+                </tr>
+                <tr>
+                  <td>Slash commands are missing</td>
+                  <td>Invite the bot with the URL from the checker and restart it. For multiple servers, set <code>DISCORD_DEV_GUILD_ID</code> for immediate test-server registration.</td>
+                </tr>
+                <tr>
+                  <td>No reply in a forum post</td>
+                  <td>Run <code>/setup channel:#your-forum autonomy_mode:auto</code> from a text channel. Unknown questions are intentionally quiet; check <code>/queue</code> and the forum permissions.</td>
+                </tr>
+                <tr>
+                  <td>Ollama is missing</td>
+                  <td>Open Ollama, pull the models named in the environment template, and run the checker again.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>
+            Read the <a href="/security/">security boundaries</a> before using real community data.
+            For operational limits and data handling, the project's security notes are the
+            authority.
+          </p>
+        </section>
+      </article>
+    </div>
+  </div>
+</Base>

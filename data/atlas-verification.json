@@ -1,0 +1,26 @@
+{
+  "recordedAt": "2026-10-23T05:03:14.685Z",
+  "synthetic": true,
+  "complete": true,
+  "separateNodeProcesses": true,
+  "write": {
+    "pid": 65232,
+    "approved": true,
+    "dimensions": 768,
+    "at": "2026-10-23T05:03:01.815Z"
+  },
+  "read": {
+    "pid": 65250,
+    "at": "2026-10-23T05:03:11.735Z",
+    "approvedKnowledgeRead": true,
+    "approvedVersionRead": true,
+    "lexicalSearch": true,
+    "exactRetrievalAfterRestart": true,
+    "generationCalls": 0,
+    "realVectorSearch": true,
+    "crossGuildVectorIsolation": true
+  },
+  "syntheticRecordsRemoved": true,
+  "paidModelCalls": 0,
+  "limitations": "Real Atlas persistence and vector-query check using synthetic records. Does not connect to Discord or measure production traffic. Cluster billing tier is verified separately through the Atlas CLI."
+}

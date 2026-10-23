@@ -33,9 +33,6 @@ export interface SupportCase {
 export type EvidenceSourceType =
   | 'memory'
   | 'documentation'
-  | 'web'
-  | 'github_issue'
-  | 'github_release'
   | 'discord_message'
   | 'user_context';
 

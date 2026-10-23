@@ -1,312 +1,150 @@
-# ThreadSherpa 🧭
+<p align="center"><img src="brand/svg/readme-header.svg" alt="ThreadSherpa — Answer once. Help the next person." width="900"></p>
 
-> *"Investigate once. Remember the resolution. Stop solving the same problem twice."*
+A Discord bot that turns a moderator’s answer into something the next person can find.
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/sea-deep/threadsherpa)
+I started ThreadSherpa after seeing repeated questions in the MLH Discord: account names, missing offer codes, student benefits. Each member needed help, but moderators kept doing the same lookup. ThreadSherpa gives that work somewhere to stay.
 
-ThreadSherpa is an open-source, self-hostable Discord support copilot with **persistent, human-trained memory**. Built for technical communities, developer Discord servers, hackathons, open-source projects, and engineering support teams.
+**Answer in the post → right-click → save once → tailored replies to new questions.** Saved knowledge supplies the facts; the LLM writes for each asker. Unknown questions wait quietly for a human. Each asker can confirm when their question is solved.
 
-Unlike generic FAQ bots or chat wrappers that blindly treat every message as memory or hallucinate unverified answers, ThreadSherpa operates like an experienced tier-2 support engineer: it investigates technical issues using permitted tools, validates evidence against official documentation and GitHub repositories, asks targeted questions when details are missing, escalates sensitive cases, and continuously learns from human support administrator corrections through an auditable approval workflow.
+**[Your minimum setup guide](docs/START_HERE.md)** · [Try the local demo](#try-it-in-a-minute) · [Set up Discord](docs/SETUP_DISCORD.md) · [Record a demo](docs/DEMO_SCRIPT.md) · [Week 3 entry plan](docs/CHALLENGE_STRATEGY.md)
 
----
+## What makes it useful
 
-## 🌟 Key Differentiators
+- **A quieter support forum.** Opt in specific channels. Answer new posts automatically, or reply only when asked. Ordinary moderator chat never becomes training data.
+- **Short, personal replies.** The LLM answers each new supported question in 1–3 sentences, with a source link and **Solved / Need help** buttons.
+- **Save once.** Right-click a human answer → **Apps → Save this answer**. It saves immediately. Existing knowledge is skipped; no second approval or broadcast.
+- **Keep knowledge current.** `/answers` opens a compact menu. **Edit** updates facts, question patterns and scope; **Remove** stops future use. `/teach` also accepts optional expiry.
+- **Follows the conversation.** A clear “that worked” closes the asker’s question quietly. “That didn’t work” preserves the attempted advice for a moderator; the bot does not repeat it automatically.
+- **Spots repeat gaps.** `/queue` groups similarly worded unanswered posts and shows their counts, while keeping every question separate.
+- **Quiet when unsure.** Unsupported questions wait in `/queue`. Members confirm solves; `/stats` shows questions, solves and open handoffs.
 
-| Standard Chatbot | ThreadSherpa Copilot |
-|---|---|
-| Blindly treats every chat message as memory | Human-in-the-loop review cards for approved, versioned knowledge |
-| Hallucinates solutions when information is missing | Enforces deterministic response policy and asks targeted follow-ups |
-| Single-turn prompt-response loop | Bounded autonomous investigation loop (Plan -> Act -> Evaluate -> Stop) |
-| Relies exclusively on expensive proprietary APIs | Flexible: Paper Instruments (`ultramarine-1-flash`), local open-weights (`gemma4`), or cloud APIs |
-| Ephemeral in-memory context lost on restart | Durable persistence: MongoDB Atlas (Vector Search & Text Indexes) with local memory fallback |
-| Ignores developer tools and repositories | Searches connected GitHub repos, checks duplicates, and drafts issues |
-| Treats repeated complaints as isolated tickets | Detects shared incident clusters and alerts administrators to outages |
-| Unmonitored execution | Sentry Agent Tracing instrumenting tool calls, inference, and spans |
+## Try it in a minute
 
----
-
-## 🔄 The Closed Learning Loop
-
-The fundamental differentiator of ThreadSherpa is its closed feedback loop:
-
-```
-  [1. OBSERVE] ──────> Member posts technical question in #support
-         │
-  [2. INVESTIGATE] ──> Searches approved memory, docs (SSRF-safe), & GitHub
-         │
-  [3. RESPOND] ──────> Posts evidence-backed guidance or asks clarifying questions
-         │
-  [4. LEARN] ────────> Support Admin posts correction or verified workaround
-         │
-  [5. EXTRACT] ──────> Agent extracts reusable question patterns & canonical answer
-         │
-  [6. APPROVE] ──────> Admin reviews Discord Review Card: [Approve] [Reject]
-         │
-  [7. REMEMBER] ─────> Versioned record committed to MongoDB Atlas + Vector index
-         │
-  [8. RECALL] ───────> Next member asks paraphrased question: immediate recall!
-```
-
----
-
-## 🏗️ Architecture & Integrations
-
-ThreadSherpa is designed as a modular monolith with strict separation between deterministic control flow and open-weight model reasoning.
-
-```
-                             +-------------------------+
-                             |   Discord Community     |
-                             |  (Members & Moderators) |
-                             +------------+------------+
-                                          |
-                                    Discord API
-                               (Slash / Events / UI)
-                                          |
-                                          v
-+------------------------------------------------------------------------------------+
-|                                ThreadSherpa Core                                   |
-|                                                                                    |
-|  +------------------------------------------------------------------------------+  |
-|  |                             Bot Gateway Layer                                |  |
-|  |   - Slash Command Registry (/ask, /case, /teach, /memory, /issue, /setup)    |  |
-|  |   - Channel & Event Monitoring (Filter bot loops, thread scope)              |  |
-|  |   - Interactive UI Handlers (Buttons, Select Menus, Modals)                  |  |
-|  +--------------------------------------+---------------------------------------+  |
-|                                         |                                          |
-|                                         v                                          |
-|  +------------------------------------------------------------------------------+  |
-|  |                           Support Orchestrator                               |  |
-|  |   - Case State Machine (new -> investigating -> awaiting -> resolved)        |  |
-|  |   - Bounded Autonomous Investigation Loop (Plan -> Act -> Evaluate -> Stop)  |  |
-|  |   - Response Policy & Confidence Calibration                                 |  |
-|  |   - Incident Detection Engine (Clustering symptoms & error codes)            |  |
-|  |   - GitHub Issue Drafter & Copilot                                           |  |
-|  |   - Sentry Agent Tracing (`traceAgentAction` spans for tools & inference)     |  |
-|  +----+----------------------+---------------------+----------------------+-----+  |
-|       |                      |                     |                      |        |
-|       v                      v                     v                      v        |
-|  +---------+           +------------+        +------------+         +-----------+  |
-|  | Storage |           | Model      |        | Tool & Web |         | Security  |  |
-|  | Layer   |           | Provider   |        | Access     |         | & Sentry  |  |
-|  +----+----+           +-----+------+        +-----+------+         +-----+-----+  |
-|       |                      |                     |                      |        |
-+-------|----------------------|---------------------|----------------------|--------+
-        |                      |                     |                      |
-        v                      v                     v                      v
-+---------------+      +---------------+     +---------------+      +---------------+
-| Mongo Atlas:  |      | Ollama Local  |     | Web Fetcher   |      | Sentry Spans  |
-| - Vector Srch |      | Gemma 4 /     |     | (SSRF Guard)  |      | Audit Trail   |
-| - Text Index  |      | EmbeddingGem. |     | SerpApi Web   |      | Role Controls |
-| - Document DB |      | 768-dim Vecs  |     | GitHub API    |      | Auth Defense  |
-+---------------+      +---------------+     +---------------+      +---------------+
-```
-
----
-
-## 🏆 Supported Platforms & Challenge Integrations
-
-- **MongoDB Atlas**: Native database backend support (`DATABASE_PROVIDER=mongodb`). Uses Atlas Vector Search (`$vectorSearch`), Atlas Full-Text indexes, and versioned collections (`knowledge_items`, `knowledge_versions`, `knowledge_reviews`, `support_cases`).
-- **Primary AI Reasoning Models**:
-  - **Paper Instruments (`ultramarine-1-flash`)**: Frontier knowledge reasoning model post-trained specifically for qualitative knowledge work, technical explanation, and troubleshooting synthesis.
-  - **Google Gemma (`gemma4:e4b-it-qat` & `embeddinggemma-2:270m`)**: 100% private, zero-cost open-weight reasoning running locally on device via Ollama.
-  - **Cloud Alternatives**: Google Gemini (`gemini-2.0-flash`), Groq (`llama-3.3-70b-versatile`), OpenRouter, or OpenAI (`gpt-4o-mini`).
-- **Sentry Agent Tracing**: Distributed tracing using `@sentry/node` to measure latency, tool execution, model prompt repairs, and investigation spans.
-- **SerpApi**: Real-time Google Web Search tool for unblocking investigations on third-party libraries, GitHub issues, and compiler errors.
-- **Render**: Production cloud deployment ready via `render.yaml` blueprint.
-
----
-
-## ⚡ Quick Start
-
-### 1. Prerequisites
-- **Node.js**: v22.0.0 or higher (tested on Node.js v26.12.0)
-- **Ollama**: Running locally with required models
-- **Discord Bot Token**: With Message Content and Server Members intents
-
-### 2. Local Model Setup (Ollama)
-Install Ollama and pull the lightweight instruction and embedding models:
+Node.js 22 or newer:
 
 ```bash
-# Pull reasoning model (7.5B Q4_0, context 131k, tool-capable)
+npm ci
+npm run demo
+```
+
+This runs the real repositories, save workflow, orchestrator, and answer policy with a **scripted fixture provider**. It sends no Discord messages and needs no API keys, database, or model. It demonstrates behavior, not AI quality or production persistence.
+
+For the same scenario with real local inference:
+
+```bash
 ollama pull gemma4:e4b-it-qat
-
-# Pull 768-dim semantic embedding model
 ollama pull embeddinggemma-2:270m
+npm run demo:live
 ```
 
-### 3. Clone and Install
-```bash
-git clone https://github.com/sea-deep/threadsherpa.git
-cd threadsherpa
-npm install
-```
+The [demo script](docs/DEMO_SCRIPT.md) explains the expected behavior and the limits of the measurements. All demo community answers are synthetic, not MLH policies or benefit guarantees.
 
-### 4. Configure Environment
-Copy the example environment configuration:
+## Run your own bot
+
+Follow [Your minimum setup](docs/START_HERE.md) for direct links and steps. For free normal operation, fill **the Discord bot token and Atlas connection string**, and use `MODEL_PROVIDER=ollama`. Paper is optional and uses API credit. The application ID is detected automatically.
 
 ```bash
-cp .env.example .env
-```
-
-Edit `.env` with your configuration:
-```env
-DISCORD_BOT_TOKEN=your_bot_token_here
-DISCORD_CLIENT_ID=your_client_id_here
-DISCORD_DEV_GUILD_ID=your_test_guild_id_here
-
-# AI Model Provider: 'paper' | 'ollama' (default) | 'gemini' | 'groq' | 'openai'
-MODEL_PROVIDER=paper
-
-# Choice 1: Paper Instruments (Primary Frontier Reasoning Choice)
-PAPER_INSTRUMENTS_API_KEY=your_paper_instruments_api_key_here
-PAPER_MODEL=ultramarine-1-flash
-
-# Choice 2: Local Open-Weight Inference (Zero cost, runs offline on device)
-# MODEL_PROVIDER=ollama
-# OLLAMA_BASE_URL=http://localhost:11434
-# OLLAMA_MODEL=gemma4:e4b-it-qat
-# OLLAMA_EMBEDDING_MODEL=embeddinggemma-2:270m
-
-# Choice 3: Cloud APIs (Gemini / Groq / OpenAI)
-# MODEL_PROVIDER=gemini
-# GEMINI_API_KEY=your_gemini_api_key
-# OPENAI_MODEL=gemini-2.0-flash
-# (Or Groq: GROQ_API_KEY=your_groq_key, or OpenAI: OPENAI_API_KEY=your_key)
-
-# Unified Database: MongoDB / MongoDB Atlas
-DATABASE_PROVIDER=mongodb
-# For cloud/production (Render, Atlas):
-# MONGODB_URI=mongodb+srv://<user>:<password>@cluster0.mongodb.net/threadsherpa?retryWrites=true&w=majority
-# For local dev / offline testing (zero external dependencies):
-MONGODB_URI=memory://
-MONGODB_DB_NAME=threadsherpa
-
-# Optional Partner Tooling:
-# SENTRY_DSN=https://examplePublicKey@o0.ingest.sentry.io/0
-# SERPAPI_API_KEY=your_serpapi_key
-# GITHUB_TOKEN=your_github_pat
-```
-
-### 5. Seed Synthetic Demo Data (Optional)
-To explore ThreadSherpa with pre-populated synthetic support cases, approved knowledge, and incident clusters:
-
-```bash
-npm run seed
-```
-
-### 6. Build and Run
-```bash
-# Development mode with hot-reloading
+npm ci
+npm run setup
 npm run dev
-
-# Production build and run
-npm run build
-npm start
 ```
 
----
+The checker preserves your existing `.env`, checks access without posting messages or paid inference, and prints the bot invite URL. Invite the bot before starting it. One-server setups register slash commands directly in that server.
 
-## ☁️ Deployment on Render
+In Discord, run setup from a regular text channel and select your support forum:
 
-ThreadSherpa can be deployed to Render as a persistent background worker using either the Blueprint specification or the Render Dashboard:
+```text
+/setup channel:#ask-community autonomy_mode:auto
+```
 
-### Option A: Blueprint Infrastructure-as-Code (`render.yaml`)
-1. In the [Render Dashboard](https://dashboard.render.com), select **Blueprints** $\rightarrow$ **New Blueprint Instance**.
-2. Connect your `threadsherpa` repository.
-3. Render automatically reads [`render.yaml`](render.yaml) (configured with `runtime: node` and `autoDeployTrigger: commit`).
-4. Enter your secrets (`DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `MONGODB_URI`, and your AI API key like `GEMINI_API_KEY`).
-5. Click **Apply** to provision the worker.
+Answer a sample forum question as a moderator, then right-click your reply → **Apps → Save this answer**. That’s it. The next question gets an LLM-written answer grounded in that knowledge. Saving never posts to older questions. `/teach` remains a manual-entry fallback.
 
-### Option B: Manual Background Worker
-1. In the Render Dashboard, click **New +** $\rightarrow$ **Background Worker**.
-2. Connect your Git repository.
-3. Configure the service settings:
-   - **Runtime**: Node
-   - **Build Command**: `npm ci && npm run build`
-   - **Start Command**: `npm start`
-4. Add the environment variables from your `.env` file (`DISCORD_BOT_TOKEN`, `DISCORD_CLIENT_ID`, `DATABASE_PROVIDER=mongodb`, `MONGODB_URI`, `MODEL_PROVIDER=gemini`, `GEMINI_API_KEY`).
+Modes are **on request** (`supervised`, default), **automatic** (`auto`), or **quiet** (`observe`: record new forum posts without replying). Follow-ups update the original asker’s question; on-request mode only automatically replies when a requested detail was pending. Only configured support channels are monitored; `/ask` is an explicit request and works elsewhere in the server.
 
----
+The old `MODEL_PROVIDER=hybrid` setting remains an alias for local Ollama. Use `MODEL_PROVIDER=paper` for the Paper + Gemma split described below.
 
-## 🎮 Discord Channel Support & Slash Commands
+## Website
 
-### Multi-Channel Architecture
-- **Forum Channels (`GuildForum`)**: Ideal for ticket-style communities. When a user creates a new forum post, ThreadSherpa automatically scans the title and starter message, creates a case, and posts the investigation findings into the post.
-- **Text Channels (`GuildText`)**: Traditional support channels. When a user posts a question, ThreadSherpa answers inline or spawns a dedicated support thread to keep the main channel clean.
-- **Threads (`PublicThread`, `PrivateThread`)**: Full thread monitoring. All follow-up discussion inside threads is automatically aggregated.
-
-### One-Time Setup Safety Protocol
-ThreadSherpa enforces a strict safety boundary: **it will never scan or read messages in a channel until that channel or forum is explicitly designated as a support channel**.
-- Run `/setup channel: #support-forum` to activate monitoring.
-- Run `/setup remove_channel: #old-channel` to remove a channel.
-
-### Dynamic Context Updates
-Support cases are rarely solved in a single message. As users paste follow-up logs, stack traces, or environment details in an active thread:
-1. ThreadSherpa appends the new facts directly into the active case summary and evidence ledger (reacting with 📝 to confirm).
-2. If the bot had previously asked a clarifying question, it automatically re-investigates with the new context.
-3. Users and admins can also explicitly update context at any time using `/case update_context: "Logs..." action: Re-investigate`.
-
----
-
-## 💻 Slash Commands Reference
-
-| Command | Permission | Description |
-|---|---|---|
-| `/setup [channel] [remove_channel] [admin_role]` | Administrator | One-time setup: add/remove monitored channels, configure admin roles & repo links |
-| `/ask [question]` | Public | Submit a question for evidence-backed autonomous investigation |
-| `/case [case_id] [update_context] [action]` | Public | View case status, update context with new logs, or trigger re-investigation |
-| `/teach [question] [solution]` | Admin Role | Explicitly teach ThreadSherpa a canonical answer or troubleshooting procedure |
-| `/memory search [query]` | Public | Search approved server knowledge using hybrid lexical + vector search |
-| `/memory list` | Public | List active approved knowledge items |
-| `/memory pending` | Admin Role | View knowledge candidates awaiting review |
-| `/memory delete [id]` | Admin Role | Purge an entry from memory and active search indexes |
-| `/issue [case_id]` | Admin Role | Draft a deduplicated, structured GitHub issue from a support discussion |
-| `/sources` | Public | View permitted documentation domains and connected GitHub repositories |
-
----
-
-## 🧪 Testing & Verification
-
-ThreadSherpa includes a comprehensive test suite covering unit tests, SSRF guards, response policies, MongoDB Atlas repositories, partner modules, and the indispensable end-to-end "Learn -> Restart -> Recall" test:
+The homepage shows the support conversation and the actual retrieval, model, and policy path. It has no model credentials or live Discord connection.
 
 ```bash
-# Run complete test suite (48 tests across 12 files)
-npm test
-
-# Run unit tests only
-npx vitest run tests/unit/
-
-# Run type-checking
-npm run typecheck
-
-# Run indispensable end-to-end release gate test
-npx vitest run tests/e2e/learning-restart-recall.test.ts
+npm ci --prefix website
+npm run dev --prefix website
 ```
 
----
+The website requires Node.js 22.23.4 or newer. [Website details](website/README.md) · [GitHub](https://github.com/sea-deep/threadsherpa) · [GitLab](https://gitlab.com/wdipak/threadsherpa).
 
-## 📚 Documentation Directory
+## Commands
 
-- [Architecture Design](docs/ARCHITECTURE.md) — System boundaries and component interactions
-- [Implementation Plan](docs/IMPLEMENTATION_PLAN.md) — Phased milestones, deliverables, and progress
-- [Security & Privacy](docs/SECURITY.md) — SSRF defenses, prompt injection mitigations, and RBAC
-- [Memory & Learning](docs/MEMORY_AND_LEARNING.md) — Deep dive into the human-approved knowledge loop
-- [Discord Setup Guide](docs/SETUP_DISCORD.md) — Step-by-step bot registration and permissions
-- [Ollama Setup Guide](docs/SETUP_OLLAMA.md) — Local model pull and healthcheck guide
-- [GitHub Setup Guide](docs/SETUP_GITHUB.md) — Configuring repository access for issue drafting
-- [Demo Walkthrough Script](docs/DEMO_SCRIPT.md) — Step-by-step reproducible scenario walkthrough
+| Command | Who | Purpose |
+| --- | --- | --- |
+| `/ask question` | Members | Find a supported answer |
+| Right-click → Apps → **Save this answer** | Moderator | Save knowledge immediately; skip duplicates |
+| `/teach question solution` | Moderator | Manual fallback; optional scope, source and expiry |
+| `/answers query` | Moderator | Choose an answer, then Edit or Remove |
+| `/queue` | Moderator | Open questions waiting for a reviewed answer |
+| `/stats` | Members | Questions, solves and open handoffs |
+| `/sources` | Members | Exact documentation pages selected by moderators |
+| `/setup` | Administrator or configured moderator | Support channels, moderator roles, reply mode and optional source page |
 
----
+Members use **Solved** and **Need help** on answer cards. There are no case or knowledge IDs to copy.
 
-## 🔒 Security & Privacy
+## Open where it matters
 
-- **SSRF Protection**: All outbound URL fetching resolves DNS and blocks private IP ranges (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `127.0.0.0/8`, `169.254.169.254`), loopbacks, and cloud metadata endpoints.
-- **Tenant Isolation**: Every database query, vector search, and memory recall strictly enforces `guild_id` boundaries.
-- **Secret Redaction**: Pino logging and GitHub issue drafters automatically mask API keys, auth headers, and tokens.
-- **Deterministic Response Policy**: The AI model cannot autonomously execute external write operations. External writes (like publishing GitHub issues) require explicit administrator confirmation buttons.
+The free default is `MODEL_PROVIDER=ollama`. With `MODEL_PROVIDER=paper`, Ultramarine handles evidence-based synthesis through the OpenAI SDK; Gemma checks duplicates and supplies embeddings locally. With `MODEL_PROVIDER=ollama`, Gemma also handles synthesis. You can inspect the prompts and policy, host the model yourself, or swap the provider. When embeddings fail, ThreadSherpa falls back to keyword search; it never fabricates replacement vectors.
 
----
+With Ollama mode, **inference** can stay on your machine. Paper mode sends support evidence and questions used for synthesis to Paper Instruments; it is not a fully local privacy mode. Discord still needs an internet connection. MongoDB can be local or hosted; optional documentation fetching and Sentry contact their respective services. Local inference has hardware and electricity costs even when it has no per-call API bill.
 
-## 📄 License
+## Paper Instruments + Gemma
 
-ThreadSherpa is licensed under the [Apache License 2.0](LICENSE).
+Copy `.env.example`, set `MODEL_PROVIDER=paper`, and add `PAPER_INSTRUMENTS_API_KEY` to your local `.env`. `PAPERINSTRUMENTS_API_KEY` is also accepted. The key is never borrowed from another provider. Ollama still checks duplicates and supplies embeddings; Paper is never asked for an unsupported embedding model.
+
+```bash
+npm run demo:paper -- --report data/paper-demo-usage.json
+```
+
+This sends synthetic support evidence to Ultramarine and runs Gemma locally. The report contains returned token counts and an estimated USD cost using [Paper’s published rates](https://docs.paperinstruments.com/docs/ultramarine/billing). Cached input and reasoning tokens are subsets, so neither is counted twice. Missing usage is left unmetered. The report is not an invoice or proof that an unrun integration works.
+
+Reasoning effort defaults to `low`, with a 4,096-token ceiling including reasoning. Set `PAPER_REASONING_EFFORT` or `PAPER_MAX_COMPLETION_TOKENS` to tune that tradeoff. SDK retries are disabled; invalid or truncated output goes through the existing safe failure path. Every supported question, including exact repeats, uses the selected model to write its reply.
+
+See [Paper setup and evidence](docs/SETUP_PAPER.md).
+
+## Focused sources
+
+Reviewed community answers come first. Optionally add up to three exact official documentation pages with `/setup source_url:https://…`. The bot reads at most two of those pages when needed. `/sources` shows the list. There is no autonomous web search, GitHub publishing or incident detection.
+
+## Persistence and integrations
+
+MongoDB stores questions, reviewed answers, versions, reviews, and run records. **`memory://` is temporary and loses data on process exit.** A configured MongoDB connection failure stops startup instead of silently discarding durability. `npm run setup` checks the connection before you start the bot.
+
+Atlas Vector Search is optional: use the [index definition](docs/atlas-vector-index.json) for `knowledge_items`, named `vector_index`. Without it, the repository ranks stored vectors with cosine similarity in application memory. This fallback is for small communities; index-backed search is the scaling path. Exact question lookup currently scans the server’s approved items.
+
+Sentry is optional. It traces investigations, model requests, and tools using `gen_ai` operations, with numeric token counts when the provider returns them. Prompts and message bodies aren’t intentionally included in spans. [Tracing notes](docs/OBSERVABILITY.md).
+
+Render’s [worker blueprint](render.yaml) needs MongoDB and a reachable, separately hosted model endpoint. It does not run Ollama inside the worker. A blueprint alone is not a deployed integration.
+
+## Checks
+
+```bash
+npm test             # deterministic tests; no model service required
+npm run typecheck
+npm run build
+npm run test:live    # opt-in Ollama checks
+npm run eval:paper   # real Paper + local embeddings, synthetic questions; uses API credit
+npm run eval:local   # same small evaluation with local inference
+npm run verify:atlas # real Atlas process-restart and vector search check; removes its synthetic records
+```
+
+The in-process learning test exercises saving, deduplication, synthesis, and correction. It does **not** prove persistence across a process restart. For a durable deployment, use Atlas and run `npm run verify:atlas` for a separate-process persistence and vector-query check. The [recorded free Atlas setup](docs/ATLAS_SETUP.md) includes actual database verification results.
+
+## Boundaries
+
+Account changes, payments, and credentials need a human. “Need help” marks the case for review; it does not page a staffed help desk. Only the asker or a moderator can change a case. Reviewed knowledge is shared within its server, so moderators should save reusable public guidance rather than private account details.
+
+Citation validation checks that a source was retrieved; it cannot prove every generated claim follows from that source. Model-generated paraphrases can still retrieve the wrong answer. The regression suite and [synthetic model evaluation](docs/EVALUATION.md) are not a broad accuracy guarantee.
+
+[Architecture](docs/ARCHITECTURE.md) · [Memory and review](docs/MEMORY_AND_LEARNING.md) · [Security](docs/SECURITY.md)
+
+Built with AI assistance, including Antigravity and Codex, with the project author responsible for review and submission. Independent community project; not affiliated with or endorsed by MLH, DEV, or Discord.
+
+Apache-2.0. See [LICENSE](LICENSE).
