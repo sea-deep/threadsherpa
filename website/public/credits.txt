@@ -12,6 +12,12 @@ Uncut Sans by Kasper Nordkvist, SIL Open Font License.
 https://github.com/kaspernordkvist/uncut_sans
 Font licenses are provided in /fonts/.
 
+Waschkueche by Peter Wiegel, copyright 2009.
+Creative Commons Attribution 3.0 Germany.
+https://www.peter-wiegel.de/Waschkueche.html
+https://creativecommons.org/licenses/by/3.0/de/
+Original webfont, without glyph modifications. License: /fonts/Waschkueche-LICENSE.txt
+
 Scene portraits from Unsplash, under the Unsplash License.
 https://unsplash.com/license
 

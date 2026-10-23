@@ -1,0 +1,32 @@
+@font-face {
+  font-family: Waschkueche;
+  src: url('/fonts/waschkueche.woff') format('woff');
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+main {
+  --font-display: Waschkueche, Uncut, sans-serif;
+}
+
+main h1,
+main h2,
+main .intro h1,
+main .support-copy h2,
+main .repeat-opening h2,
+main .inside-opening h2,
+main .limits-section h2,
+main .setup-section h2,
+main .page-hero h1 {
+  font-weight: 400;
+  letter-spacing: -0.015em;
+}
+
+main h3 {
+  font-family: var(--font-body);
+}
+
+main .discord-surface h3 {
+  font-family: inherit;
+}
