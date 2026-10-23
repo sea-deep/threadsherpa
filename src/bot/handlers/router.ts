@@ -17,6 +17,8 @@ import { SupportCase } from '../../domain/case.js';
 import { answerFeedback } from '../../support/conversation.js';
 import { groupWaitingQuestions } from '../../support/queue.js';
 import { buildCaseEmbed, buildCaseActions } from '../ui/embeds.js';
+import { MemoryPanel } from './memory-panel.js';
+import { httpsSource } from '../../memory/faq-import.js';
 
 type Interaction = ChatInputCommandInteraction | ButtonInteraction | MessageContextMenuCommandInteraction | ModalSubmitInteraction | StringSelectMenuInteraction;
 const id = () => `case_${randomUUID()}`;
@@ -25,9 +27,12 @@ const safeText = (text: string) => text.replace(/[\[\]<>*_`]/g, '');
 
 export class BotInteractionRouter {
   private pendingThreads = new Set<string>();
+  private memoryPanel: MemoryPanel;
   constructor(private guildRepo: GuildConfigRepository, private caseRepo: CaseRepository,
     private evidenceRepo: EvidenceRepository, private knowledgeRepo: KnowledgeRepository,
-    private orchestrator: AgentOrchestrator, private learningPipeline: LearningPipeline) {}
+    private orchestrator: AgentOrchestrator, private learningPipeline: LearningPipeline) {
+    this.memoryPanel = new MemoryPanel(knowledgeRepo, guildRepo, learningPipeline);
+  }
 
   private async isAuthorizedAdmin(interaction: Interaction): Promise<boolean> {
     const member = interaction.member as GuildMember | null;
@@ -63,6 +68,10 @@ export class BotInteractionRouter {
         await i.editReply(await this.card(c.case_id)); return;
       }
       case 'teach': return this.handleTeach(i);
+      case 'memory': {
+        if (await this.moderatorOnly(i)) await this.memoryPanel.open(i);
+        return;
+      }
       case 'answers': return this.handleAnswers(i);
       case 'queue': {
         if (!(await this.moderatorOnly(i))) return;
@@ -174,7 +183,9 @@ export class BotInteractionRouter {
   private savedCard(item: KnowledgeItem) {
     const embed = new EmbedBuilder().setTitle(item.question_patterns[0].slice(0, 256))
       .setDescription(item.canonical_answer.slice(0, 3500)).setColor(0x2fa36b);
-    if (item.applies_when || item.expires_at) embed.setFooter({ text: [item.applies_when, item.expires_at ? `Until ${item.expires_at.slice(0, 10)}` : null].filter(Boolean).join(' · ').slice(0, 2048) });
+    embed.setFooter({ text: [`Version ${item.current_version}`, item.applies_when, item.expires_at ? `Until ${item.expires_at.slice(0, 10)}` : null].filter(Boolean).join(' · ').slice(0, 2048) });
+    const source = item.source_refs.find(ref => /^https:\/\//i.test(ref) && ref.length <= 900);
+    if (source) embed.addFields({ name: 'Original answer', value: `<${source}>` });
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId(`correct_answer:${item.knowledge_id}`).setLabel('Edit').setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`delete_answer:${item.knowledge_id}`).setLabel('Remove').setStyle(ButtonStyle.Danger));
@@ -257,11 +268,15 @@ export class BotInteractionRouter {
       new TextInputBuilder().setCustomId('answer').setLabel('Answer').setStyle(TextInputStyle.Paragraph).setMaxLength(3500).setValue(item.canonical_answer),
       new TextInputBuilder().setCustomId('scope').setLabel('Scope (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(200).setValue(item.applies_when || ''),
     ];
-    if (!correction) fields.push(new TextInputBuilder().setCustomId('days').setLabel('Expires in days (optional, 1–365)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(3).setValue(item.expires_at ? String(Math.max(1, Math.ceil((Date.parse(item.expires_at) - Date.now()) / 86400000))) : ''));
+    fields.push(correction
+      ? new TextInputBuilder().setCustomId('expiry').setLabel('Expiry date (YYYY-MM-DD, blank for none)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(10).setValue(item.expires_at?.slice(0, 10) || '')
+      : new TextInputBuilder().setCustomId('days').setLabel('Expires in days (optional, 1–365)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(3).setValue(item.expires_at ? String(Math.max(1, Math.ceil((Date.parse(item.expires_at) - Date.now()) / 86400000))) : ''));
+    fields.push(new TextInputBuilder().setCustomId('source').setLabel('Original answer URL (optional)').setStyle(TextInputStyle.Short).setRequired(false).setMaxLength(500).setValue((item.source_refs[0] || '').slice(0, 500)));
     return modal.addComponents(...fields.map(f => new ActionRowBuilder<TextInputBuilder>().addComponents(f)));
   }
   async handleModal(i: ModalSubmitInteraction): Promise<void> {
     if (!i.guildId || !(await this.moderatorOnly(i))) return;
+    if (i.customId.startsWith('memory_')) { await this.memoryPanel.modal(i); return; }
     const [action, target, version] = i.customId.split(':');
     if (!['edit_draft', 'correct_answer'].includes(action)) return;
     const item = await this.knowledgeRepo.get(target);
@@ -273,16 +288,33 @@ export class BotInteractionRouter {
     const answer = i.fields.getTextInputValue('answer');
     const scope = i.fields.getTextInputValue('scope').trim();
     const days = action === 'edit_draft' ? i.fields.getTextInputValue('days').trim() : '';
+    // Modals opened before an update may not contain the newer optional fields.
+    const optionalField = (name: string) => { try { return i.fields.getTextInputValue(name); } catch { return undefined; } };
+    let source: string | undefined, expiry: string | null | undefined;
+    try {
+      const sourceText = optionalField('source');
+      source = sourceText === undefined ? item.source_refs[0] : httpsSource(sourceText);
+      if (action === 'correct_answer') {
+        const date = optionalField('expiry')?.trim();
+        if (date && (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(Date.parse(date)) || new Date(date).toISOString().slice(0, 10) !== date)) throw new Error('Use an expiry date like 2026-10-26, or leave it blank.');
+        expiry = date === undefined || date === item.expires_at?.slice(0, 10) ? item.expires_at
+          : date ? `${date}T23:59:59.999Z` : null;
+      }
+    } catch (error) {
+      await i.reply({ content: error instanceof Error ? error.message : 'Check the source and expiry.', ephemeral: true }); return;
+    }
     if (!question || patterns.length > 5 || patterns.some(p => p.length > 200) || !answer.trim() || (days && (!/^\d+$/.test(days) || +days < 1 || +days > 365))) {
       await i.reply({ content: 'Add a question (up to 200 characters per line) and answer. Expiry: 1–365 days.', ephemeral: true }); return;
     }
     await i.deferReply({ ephemeral: true });
     if (action === 'correct_answer') {
-      await this.learningPipeline.correctAndSupersede(target, { canonical_answer: answer, question_patterns: patterns, applies_when: scope || null, change_reason: 'Corrected through Discord review form' }, i.user.id);
-      await i.editReply({ content: 'Updated.' }); return;
+      const updated = await this.learningPipeline.correctAndSupersede(target, { canonical_answer: answer, question_patterns: patterns, applies_when: scope || null,
+        source_refs: source === item.source_refs[0] ? item.source_refs : source ? [source] : [], expires_at: expiry,
+        change_reason: 'Corrected through Discord review form' }, i.user.id, item.current_version);
+      await i.editReply({ content: updated ? 'Updated.' : 'Answer changed. Open /memory again.' }); return;
     }
     const result = await this.learningPipeline.saveAnswer({ guildId: i.guildId, channelId: i.channelId || 'unavailable', adminUserId: i.user.id,
-      adminMessage: answer, sourceUrl: item.source_refs[0] || undefined, originCaseId: item.origin_case_id || undefined,
+      adminMessage: answer, sourceUrl: source, originCaseId: item.origin_case_id || undefined,
       appliesWhen: scope || undefined, expiresAt: days ? new Date(Date.now() + +days * 86400000).toISOString() : null,
       caseContext: { originalQuestion: question }, reviewedPatterns: patterns });
     await this.learningPipeline.rejectCandidate(target, i.user.id, 'Saved through the simplified flow');
@@ -290,6 +322,10 @@ export class BotInteractionRouter {
   }
 
   async handleButton(i: ButtonInteraction): Promise<void> {
+    if (i.customId.startsWith('memory_')) {
+      if (i.guildId && await this.moderatorOnly(i)) await this.memoryPanel.button(i);
+      return;
+    }
     const [action, target] = i.customId.split(':');
     if (!i.guildId || !target) return;
     if (['solve_case', 'handoff_case', 'retry_case'].includes(action)) {

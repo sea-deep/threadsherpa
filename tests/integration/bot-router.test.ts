@@ -624,7 +624,7 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
     await knowledgeRepo.createCandidate({ knowledge_id: 'modal-open', guild_id: guildId, question_patterns: ['Where is the schedule?'], canonical_answer: 'Read the pinned post.', created_by: adminUserId });
     const showModal = vi.fn((modal: any) => {
       const data = modal.toJSON();
-      expect(data.components).toHaveLength(4);
+      expect(data.components).toHaveLength(5);
       expect(data.custom_id).toBe('edit_draft:modal-open:v1');
     });
     await router.handleButton({ guildId, customId: 'edit_draft:modal-open', user: { id: adminUserId }, member: moderator, showModal } as any);
@@ -644,6 +644,154 @@ describe('BotInteractionRouter & Discord Gateway Integration (MongoDB)', () => {
     await router.handleButton(interaction as any);
     expect((await caseRepo.get('one-off'))?.status).toBe('resolved');
     expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(0);
+  });
+
+  const memoryInteraction = (extra: Record<string, unknown> = {}) => ({
+    guildId, channelId: supportChannelId, commandName: 'memory', user: { id: adminUserId }, member: moderator,
+    options: { getString: vi.fn().mockReturnValue(null) }, reply: vi.fn(), deferReply: vi.fn(), editReply: vi.fn(),
+    deferUpdate: vi.fn(), update: vi.fn(), showModal: vi.fn((modal: any) => modal.toJSON()), ...extra,
+  });
+  async function openMemory() {
+    const command = memoryInteraction(); await router.handleCommand(command as any);
+    const payload = command.editReply.mock.calls[0][0];
+    const token = payload.components.at(-1).toJSON().components.find((button: any) => button.label === 'Add answer').custom_id.split(':')[1];
+    return { command, payload, token };
+  }
+  async function previewImport(token: string, faq: string) {
+    const modal = memoryInteraction({ customId: `memory_import_form:${token}`,
+      fields: { getTextInputValue: (key: string) => key === 'faq' ? faq : '' } });
+    await router.handleModal(modal as any);
+    return modal;
+  }
+
+  it('shows a private, paginated library including expired answers but excludes deleted answers and other servers', async () => {
+    for (let n = 0; n < 7; n++) {
+      await knowledgeRepo.createCandidate({ knowledge_id: `library-${n}`, guild_id: guildId, question_patterns: [`Question ${n}?`], canonical_answer: `Answer ${n}`, created_by: adminUserId, expires_at: n === 0 ? '2020-01-01T00:00:00Z' : null });
+      await knowledgeRepo.approve(`library-${n}`, adminUserId);
+    }
+    await knowledgeRepo.delete('library-6');
+    await knowledgeRepo.createCandidate({ knowledge_id: 'foreign-library', guild_id: 'foreign', question_patterns: ['Private elsewhere'], canonical_answer: 'Foreign answer', created_by: adminUserId });
+    await knowledgeRepo.approve('foreign-library', adminUserId);
+    const { command, payload, token } = await openMemory();
+    expect(command.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(payload.embeds[0].toJSON().description).toContain('6 saved answers');
+    expect(payload.components[0].toJSON().components[0].options).toHaveLength(5);
+    const next = memoryInteraction({ customId: `memory_page:${token}:1` });await router.handleButton(next as any);
+    expect(next.editReply.mock.calls[0][0].components[0].toJSON().components[0].options).toHaveLength(1);
+    expect(JSON.stringify(payload)).not.toContain('Foreign answer');
+    expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(5);
+    const search = await knowledgeRepo.listSaved(guildId, 'Answer 0');
+    expect(search.items[0].knowledge_id).toBe('library-0');
+  });
+
+  it('blocks regular members and binds the private buttons to their administrator and server', async () => {
+    const member = memoryInteraction({ member: { permissions: new PermissionsBitField(), roles: { cache: new Map() } } });
+    await router.handleCommand(member as any);
+    expect(member.reply).toHaveBeenCalledWith({ content: 'Moderators only.', ephemeral: true });
+    expect(member.deferReply).not.toHaveBeenCalled();
+    const { token } = await openMemory();
+    for (const identity of [{ user: { id: 'another-admin' } }, { guildId: 'foreign' }]) {
+      const button = memoryInteraction({ customId: `memory_add:${token}`, ...identity });
+      await router.handleButton(button as any);expect(button.showModal).not.toHaveBeenCalled();expect(button.reply).toHaveBeenCalled();
+    }
+  });
+
+  it('opens valid add and import modals and saves a new answer through the normal memory pipeline', async () => {
+    const { token } = await openMemory();
+    for (const action of ['add', 'import']) {
+      const button = memoryInteraction({ customId: `memory_${action}:${token}` });await router.handleButton(button as any);
+      expect(button.showModal).toHaveBeenCalledOnce();
+    }
+    const modal = memoryInteraction({ customId: `memory_add_form:${token}`, fields: { getTextInputValue: (key: string) => ({ question: 'Where do I submit?', answer: 'Use #submissions.', source: 'https://example.com/faq', scope: '', days: '' }[key] || '') } });
+    await router.handleModal(modal as any);
+    expect((await knowledgeRepo.searchExact(guildId, 'Where do I submit?'))[0].canonical_answer).toBe('Use #submissions.');
+    expect(modal.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+  });
+
+  it('previews full FAQ text without writes, requires confirmation, and skips duplicate saves on re-import', async () => {
+    const { token } = await openMemory();
+    const faq = '## Can I work alone?\nYes.\n\n## Do I need a video?\nNo.';
+    const preview = await previewImport(token, faq);
+    expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(0);
+    expect(preview.editReply.mock.calls[0][0].embeds[0].toJSON().description).toContain('Do I need a video?');
+    const confirmId = preview.editReply.mock.calls[0][0].components[0].toJSON().components[0].custom_id;
+    const confirm = memoryInteraction({ customId: confirmId });await router.handleButton(confirm as any);
+    expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(2);
+    expect(confirm.editReply.mock.calls[0][0].content).toContain('2 saved');
+    await router.handleButton(memoryInteraction({ customId: confirmId }) as any);
+    const again = await previewImport(token, faq);
+    const duplicate = memoryInteraction({ customId: again.editReply.mock.calls[0][0].components[0].toJSON().components[0].custom_id });
+    await router.handleButton(duplicate as any);
+    expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(2);
+    expect(duplicate.editReply.mock.calls[0][0].content).toContain('2 already saved');
+  });
+
+  it('does not allow an old preview to approve a replacement import', async () => {
+    const { token } = await openMemory();
+    const old = await previewImport(token, '## Old question?\nOld answer.');
+    const oldId = old.editReply.mock.calls[0][0].components[0].toJSON().components[0].custom_id;
+    await previewImport(token, '## New question?\nNew answer.');
+    const confirm = memoryInteraction({ customId: oldId });await router.handleButton(confirm as any);
+    expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(0);
+    expect(confirm.reply).toHaveBeenCalled();
+  });
+
+  it('lets a moderator update the source and expiry of an expired saved answer', async () => {
+    await knowledgeRepo.createCandidate({ knowledge_id: 'expired-edit', guild_id: guildId, question_patterns: ['Deadline?'], canonical_answer: 'Old deadline.', created_by: adminUserId, expires_at: '2020-01-01T00:00:00Z' });
+    await knowledgeRepo.approve('expired-edit', adminUserId);
+    const modal = memoryInteraction({ customId: 'correct_answer:expired-edit:v1', fields: { getTextInputValue: (key: string) => ({ question: 'Deadline?', answer: 'New deadline.', scope: '', expiry: '2030-01-01', source: 'https://example.com/deadline' }[key] || '') } });
+    await router.handleModal(modal as any);
+    const updated = await knowledgeRepo.get('expired-edit');
+    expect(updated?.current_version).toBe(2);expect(updated?.expires_at).toBe('2030-01-01T23:59:59.999Z');
+    expect(updated?.source_refs).toEqual(['https://example.com/deadline']);
+    expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(1);
+  });
+
+  it('accepts only one concurrent edit of a version and refuses an older form', async () => {
+    await knowledgeRepo.createCandidate({ knowledge_id: 'concurrent-edit', guild_id: guildId,
+      question_patterns: ['Deadline?'], canonical_answer: 'Original.', created_by: adminUserId });
+    await knowledgeRepo.approve('concurrent-edit', adminUserId);
+    const results = await Promise.all([
+      knowledgeRepo.correctAndSupersede('concurrent-edit', { canonical_answer: 'Monday.' }, adminUserId, 1),
+      knowledgeRepo.correctAndSupersede('concurrent-edit', { canonical_answer: 'Tuesday.' }, 'other-admin', 1),
+    ]);
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect((await knowledgeRepo.get('concurrent-edit'))?.current_version).toBe(2);
+    expect(await db.collection('knowledge_versions').countDocuments({ knowledge_id: 'concurrent-edit' })).toBe(2);
+    const stale = memoryInteraction({ customId: 'correct_answer:concurrent-edit:v1' });
+    await router.handleModal(stale as any);
+    expect(stale.reply.mock.calls[0][0].content).toContain('Answer changed');
+    expect((await knowledgeRepo.get('concurrent-edit'))?.current_version).toBe(2);
+  });
+
+  it('keeps successful imports and retries only unfinished answers after a failure', async () => {
+    const { token } = await openMemory();
+    const preview = await previewImport(token, '## First?\nOne.\n## Second?\nTwo.');
+    const confirmId = preview.editReply.mock.calls[0][0].components[0].toJSON().components[0].custom_id;
+    const originalSave = learningPipeline.saveAnswer.bind(learningPipeline);
+    let calls = 0;
+    const spy = vi.spyOn(learningPipeline, 'saveAnswer').mockImplementation(async options => {
+      calls++; if (calls === 2) throw new Error('Temporary database failure'); return originalSave(options);
+    });
+    const confirm = memoryInteraction({ customId: confirmId }); await router.handleButton(confirm as any);
+    expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(1);
+    expect(confirm.editReply.mock.calls[0][0].content).toContain('Retry');
+    await router.handleButton(memoryInteraction({ customId: confirmId }) as any);
+    expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(2); expect(calls).toBe(3);
+    spy.mockRestore();
+  });
+
+  it('cancels imports without saving and rejects expired sessions', async () => {
+    const { token } = await openMemory();
+    const preview = await previewImport(token, '## Cancelled?\nNot saved.');
+    const cancelId = preview.editReply.mock.calls[0][0].components[0].toJSON().components[1].custom_id;
+    await router.handleButton(memoryInteraction({ customId: cancelId }) as any);
+    expect(await knowledgeRepo.getApproved(guildId)).toHaveLength(0);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 16 * 60_000);
+    try {
+      const expired = memoryInteraction({ customId: `memory_add:${token}` }); await router.handleButton(expired as any);
+      expect(expired.showModal).not.toHaveBeenCalled(); expect(expired.reply).toHaveBeenCalled();
+    } finally { now.mockRestore(); }
   });
 
 });

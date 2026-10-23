@@ -228,13 +228,15 @@ Extract:
       does_not_apply_when?: string | null;
       change_reason?: string;
       source_refs?: string[];
+      expires_at?: string | null;
     },
-    reviewerId: string
+    reviewerId: string,
+    expectedVersion?: number
   ): Promise<KnowledgeItem | null> {
     const current = await this.knowledgeRepo.get(knowledgeId);
-    if (!current) return null;
+    if (!current || (expectedVersion !== undefined && current.current_version !== expectedVersion)) return null;
     const embedding = await this.modelProvider.generateEmbedding(`${(correction.question_patterns || current.question_patterns).join(' ')} ${correction.canonical_answer}`).catch(() => null);
-    const updated = await this.knowledgeRepo.correctAndSupersede(knowledgeId, { ...correction, embedding }, reviewerId);
+    const updated = await this.knowledgeRepo.correctAndSupersede(knowledgeId, { ...correction, embedding }, reviewerId, expectedVersion ?? current.current_version);
     if (updated) {
       await this.auditRepo.log({
         guild_id: updated.guild_id,

@@ -69,9 +69,11 @@ export const teachCommand = new SlashCommandBuilder()
 
 export const answersCommand = new SlashCommandBuilder().setName('answers').setDescription('Find or edit saved knowledge')
   .addStringOption(opt => opt.setName('query').setDescription('Search reviewed answers').setMaxLength(200));
+export const memoryCommand = new SlashCommandBuilder().setName('memory').setDescription('Manage saved answers and import FAQs')
+  .addStringOption(opt => opt.setName('query').setDescription('Find a saved question or answer').setMaxLength(200));
 
 export const queueCommand = new SlashCommandBuilder().setName('queue').setDescription('See questions that need help');
 export const sourcesCommand = new SlashCommandBuilder().setName('sources').setDescription('See documentation sources');
 export const statsCommand = new SlashCommandBuilder().setName('stats').setDescription('See questions and solves');
 export const saveAnswerCommand = new ContextMenuCommandBuilder().setName('Save this answer').setType(ApplicationCommandType.Message);
-export const allCommands = [setupCommand, askCommand, teachCommand, answersCommand, queueCommand, sourcesCommand, statsCommand, saveAnswerCommand];
+export const allCommands = [setupCommand, askCommand, teachCommand, answersCommand, memoryCommand, queueCommand, sourcesCommand, statsCommand, saveAnswerCommand];

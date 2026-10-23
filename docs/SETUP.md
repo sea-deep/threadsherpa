@@ -81,7 +81,21 @@ For a normal text support channel, select it using the same `channel` option. Pl
 
 The bot should write a short sourced reply. Unsupported questions wait in `/queue` without a public filler message. Saving knowledge does not broadcast replies to older posts.
 
-Use `/answers` to edit or remove guidance. `/teach question:… solution:…` saves knowledge without an existing message.
+Use `/memory` to manage this server’s saved answers in a private moderator panel. Pick an answer to edit its wording, source, scope, or expiry. Search with `/memory query:submission`. Expired answers remain visible here but are excluded from replies.
+
+**Import FAQs** opens a form for up to 4,000 characters and 10 answers. Paste Markdown with one question per `##` heading, or `Q:` / `A:` pairs:
+
+```markdown
+## Where do I submit?
+Post the public repository in #submissions.
+
+## Do I need a video?
+A video is optional.
+```
+
+Review the preview and choose **Save answers**. Nothing is saved before confirmation. Re-importing the same answers skips duplicates. A failed import can resume from the unfinished answer. No extra API key or file upload is needed.
+
+`/answers` and `/teach question:… solution:…` still work.
 
 ## Troubleshooting
 

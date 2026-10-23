@@ -154,12 +154,14 @@ export class KnowledgeRepository {
       does_not_apply_when?: string | null;
       change_reason?: string;
       source_refs?: string[];
+      expires_at?: string | null;
       embedding?: number[] | null;
     },
-    reviewerId: string
+    reviewerId: string,
+    expectedVersion?: number
   ): Promise<KnowledgeItem | null> {
     const existing = await this.get(knowledgeId);
-    if (!existing || existing.approval_status !== 'approved') return null;
+    if (!existing || existing.approval_status !== 'approved' || (expectedVersion !== undefined && existing.current_version !== expectedVersion)) return null;
 
     const nextVersion = existing.current_version + 1;
     const now = new Date().toISOString();
@@ -170,15 +172,9 @@ export class KnowledgeRepository {
     const sources = correction.source_refs || existing.source_refs;
     const embedding = correction.embedding ?? null;
 
-    // Mark previous version superseded
-    await this.versionsCollection.updateOne(
-      { knowledge_id: knowledgeId, version: existing.current_version },
-      { $set: { approval_state: 'superseded' } }
-    );
-
-    // Update main item
-    await this.collection.updateOne(
-      { knowledge_id: knowledgeId },
+    // Claim this version before changing history; another admin may have edited it.
+    const claimed = await this.collection.updateOne(
+      { knowledge_id: knowledgeId, current_version: existing.current_version, approval_status: 'approved' },
       {
         $set: {
           current_version: nextVersion,
@@ -187,12 +183,19 @@ export class KnowledgeRepository {
           applies_when: applies,
           does_not_apply_when: doesNotApply,
           source_refs: sources,
+          expires_at: correction.expires_at === undefined ? existing.expires_at : correction.expires_at,
           embedding,
           approval_status: 'approved',
           verified_at: now,
           updated_at: now,
         },
       }
+    );
+    if (!claimed.modifiedCount) return null;
+
+    await this.versionsCollection.updateOne(
+      { knowledge_id: knowledgeId, version: existing.current_version },
+      { $set: { approval_state: 'superseded' } }
     );
 
     // Record new version
@@ -366,6 +369,22 @@ export class KnowledgeRepository {
     }).sort({ updated_at: -1 }).toArray();
 
     return docs.map(d => this.mapDoc(d as Record<string, unknown>)).filter(isCurrentKnowledge);
+  }
+
+  async listSaved(guildId: string, query = '', page = 0, pageSize = 5) {
+    const filter = {
+      guild_id: guildId,
+      approval_status: 'approved',
+      ...(query.trim() ? { $or: ['question_patterns', 'canonical_answer'].map(field => ({
+        [field]: { $regex: new RegExp(query.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+      })) } : {}),
+    };
+    const total = await this.collection.countDocuments(filter);
+    const lastPage = Math.max(0, Math.ceil(total / pageSize) - 1);
+    const currentPage = Math.min(lastPage, Math.max(0, Math.floor(page)));
+    const docs = await this.collection.find(filter).sort({ updated_at: -1, knowledge_id: 1 })
+      .skip(currentPage * pageSize).limit(pageSize).toArray();
+    return { items: docs.map(d => this.mapDoc(d as Record<string, unknown>)), total, page: currentPage, lastPage };
   }
 
   async getVersions(knowledgeId: string): Promise<KnowledgeVersion[]> {

@@ -96,7 +96,8 @@ Knowledge is scoped to the server and can be edited, removed, or given an expiry
 | `/setup` | Connect a channel, choose a moderator role, and set reply behavior. |
 | `/ask` | Ask explicitly instead of waiting for automatic replies. |
 | `/teach` | Save knowledge when there is no existing answer message. |
-| `/answers` | Edit or remove saved guidance. |
+| `/memory` | Browse, add, edit, or import saved answers in a private moderator panel. |
+| `/answers` | Find or remove saved guidance. |
 | `/queue` | Review waiting questions and repeated gaps. |
 | `/stats` | View questions, confirmed solves, and handoffs. |
 
