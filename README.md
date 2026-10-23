@@ -1,6 +1,6 @@
 # ThreadSherpa
 
-![ThreadSherpa, a small trail guide carrying a saved answer](website/public/brand/repository-thumbnail-1280x640.png)
+![ThreadSherpa, a small trail guide carrying a saved answer](brand/png/repository-thumbnail-1280x640.png)
 
 A Discord support bot that remembers the useful answer and helps the next person asking the same thing.
 

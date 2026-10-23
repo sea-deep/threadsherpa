@@ -1,9 +1,36 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="ThreadSherpa">
-  <title>ThreadSherpa</title>
-  <rect width="512" height="512" fill="#0B1017"/>
-  <g transform="translate(5.38,-24.94) scale(0.97897)" fill="none" stroke="#F2A03D" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M98.00 397.96 L256.00 300.00 L414.00 397.96" stroke-width="50"/>
-      <path d="M134.00 309.64 L256.00 234.00 L378.00 309.64" stroke-width="42"/>
-      <path d="M170.00 221.32 L256.00 168.00 L342.00 221.32" stroke-width="34"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="ThreadSherpa Avatar">
+  <title>ThreadSherpa Avatar</title>
+  <rect width="512" height="512" rx="112" fill="#100F15"/>
+  <g transform="translate(-16,-7) scale(2.25)">
+    <g class="guide-body">
+      <g class="guide-pack">
+        <path d="M158 106h26c16 0 27 12 27 27v48c0 14-10 24-24 24h-26z" fill="#A8BF79"/>
+        <path d="M161 106h23c14 0 25 10 27 24l-22 12-28-7z" fill="#D7F59C"/>
+        <path d="M188 142v17" stroke="#6D8245" stroke-width="7" stroke-linecap="round"/>
+        <rect x="174" y="174" width="27" height="18" rx="7" fill="#D7F59C"/>
+      </g>
+      <g class="guide-feet" fill="#B46A29">
+        <path class="guide-foot guide-foot--left" d="M72 194h33v16c0 7-5 11-12 11H72c-8 0-12-4-10-10z"/>
+        <path class="guide-foot guide-foot--right" d="M130 194h31l12 17c4 6 0 10-7 10h-26c-6 0-10-4-10-10z"/>
+      </g>
+      <path d="M71 135h85l15 49c4 16-8 28-24 28H80c-17 0-29-12-24-28z" fill="#DB8C3A"/>
+      <path d="M79 136h62l13 57c2 9-5 15-13 15H83c-10 0-15-8-13-16z" fill="#F2A74B"/>
+      <path d="M120 26c-8-1-16 5-22 11C76 57 52 85 46 112c-6 26 9 48 34 52 17 3 49 3 67 0 25-4 40-23 35-49-5-29-28-64-46-81-5-5-10-8-16-8z" fill="#F2A74B"/>
+      <path d="M140 47c17 23 29 48 32 70 4 23-7 37-26 42 25-3 41-22 36-47-4-24-23-51-42-65z" fill="#DB8C3A"/>
+      <path d="M73 108c1-19 15-30 38-30h12c22 0 36 12 38 31l1 12c2 17-10 27-28 29-12 2-26 2-38 0-18-2-30-12-26-29z" fill="#24212C"/>
+      <g class="guide-eyes" fill="#F2EDE3">
+        <rect class="guide-eye" x="91" y="108" width="9" height="14" rx="4.5"/>
+        <rect class="guide-eye" x="132" y="108" width="9" height="14" rx="4.5"/>
+      </g>
+      <path d="m104 61 12-8 12 8m-19 7 7-5 7 5" stroke="#B46A29" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M72 158c24 11 58 11 81-1l4 16c-26 12-62 12-89 0z" fill="#F2EDE3"/>
+      <path class="guide-scarf" d="m79 168 19 4-12 29-17-10z" fill="#E3DDD1"/>
+      <path d="M59 169c-11 3-18 13-16 22 2 7 8 9 13 5l17-18" fill="#DB8C3A"/>
+      <g class="guide-hand">
+        <rect class="guide-note" x="158" y="151" width="34" height="43" rx="5" transform="rotate(12 158 151)" fill="#F2EDE3"/>
+        <path class="guide-note" d="m166 165 14 3m-16 5 11 2" stroke="#A8BF79" stroke-width="3" stroke-linecap="round"/>
+        <path d="M152 176c9-8 21-5 23 2 2 6-5 12-17 13" fill="#F2A74B"/>
+      </g>
     </g>
+  </g>
 </svg>

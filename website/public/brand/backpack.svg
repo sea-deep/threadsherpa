@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none" role="img" aria-label="ThreadSherpa Trail Pack">
+  <title>ThreadSherpa Trail Pack</title>
+  <g transform="translate(-15, -15)">
+    <!-- Backpack shadow -->
+    <ellipse cx="115" cy="188" rx="42" ry="7" fill="#09090D" opacity="0.35"/>
+    <!-- Main pack body -->
+    <path d="M85 58h52c30 0 50 22 50 50v62c0 20-18 36-44 36H85z" fill="#A8BF79"/>
+    <!-- Top flap & roll cover -->
+    <path d="M91 58h43c26 0 46 18 50 44l-40 22-53-13z" fill="#D7F59C"/>
+    <!-- Vertical closure strap -->
+    <path d="M141 124v31" stroke="#6D8245" stroke-width="12" stroke-linecap="round"/>
+    <!-- Front utility pouch -->
+    <rect x="115" y="152" width="50" height="32" rx="12" fill="#D7F59C"/>
+    <!-- Fastener buckle -->
+    <rect x="131" y="146" width="20" height="10" rx="3" fill="#6D8245"/>
+    <!-- Shoulder harness strap left -->
+    <path d="M85 75C68 75 56 94 56 122v42c0 14 8 24 20 28" stroke="#6D8245" stroke-width="9" stroke-linecap="round"/>
+  </g>
+</svg>

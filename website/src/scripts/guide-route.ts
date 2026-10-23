@@ -6,7 +6,8 @@ export interface GuideRoute { points:Point[]; distances:number[]; length:number;
 export function guideRoutes(stops:Point[], width:number, height:number, size:number, obstacles:Rect[]):GuideRoute[] {
   const step=18, edge=36, cols=Math.ceil((width+edge*2)/step)+1, rows=Math.ceil(height/step)+1;
   const blocked=new Uint8Array(cols*rows);
-  const padding=size*.36+6;
+  const clearance=size*.36+6;
+  const padding=clearance+12;
   const directions=[[0,1],[1,0],[-1,0],[0,-1],[1,1],[-1,1],[1,-1],[-1,-1]];
   const cell=(p:Point)=>Math.min(rows-1,Math.max(0,Math.round(p.y/step)))*cols+Math.min(cols-1,Math.max(0,Math.round((p.x+edge)/step)));
   const point=(index:number):Point=>({x:(index%cols)*step-edge,y:Math.floor(index/cols)*step});
@@ -50,13 +51,56 @@ export function guideRoutes(stops:Point[], width:number, height:number, size:num
       let next=raw.length-1;while(next>i+1&&!freeLine(raw[i],raw[next]))next--;
       points.push(raw[next]);i=next;
     }
+    const rounded=roundCorners(points, p => obstacles.every(r => p.x<r.left-clearance || p.x>r.right+clearance || p.y<r.top-clearance || p.y>r.bottom+clearance));
     const distances=[0];
-    for(let i=1;i<points.length;i++)distances.push(distances[i-1]+Math.hypot(points[i].x-points[i-1].x,points[i].y-points[i-1].y));
-    return {points,distances,length:distances[distances.length-1]};
+    for(let i=1;i<rounded.length;i++)distances.push(distances[i-1]+Math.hypot(rounded[i].x-rounded[i-1].x,rounded[i].y-rounded[i-1].y));
+    return {points:rounded,distances,length:distances[distances.length-1]};
   });
 }
 
+/** Tangent-aligned cubic Bézier fillets soften turns without cutting through content. */
+function roundCorners(points:Point[], safe:(point:Point)=>boolean):Point[] {
+  const rounded=[points[0]];
+  for(let i=1;i<points.length-1;i++){
+    const a=points[i-1],b=points[i],c=points[i+1];
+    const incoming=Math.hypot(b.x-a.x,b.y-a.y),outgoing=Math.hypot(c.x-b.x,c.y-b.y);
+    if(incoming<1||outgoing<1)continue;
+    let radius=Math.min(80,incoming*.35,outgoing*.35);
+    let curve:Point[]=[];
+    while(radius>1){
+      const enter={x:b.x+(a.x-b.x)*radius/incoming,y:b.y+(a.y-b.y)*radius/incoming};
+      const exit={x:b.x+(c.x-b.x)*radius/outgoing,y:b.y+(c.y-b.y)*radius/outgoing};
+      const controlA={x:enter.x+(b.x-enter.x)*2/3,y:enter.y+(b.y-enter.y)*2/3};
+      const controlB={x:exit.x+(b.x-exit.x)*2/3,y:exit.y+(b.y-exit.y)*2/3};
+      curve=Array.from({length:25},(_,step)=>{
+        const t=step/24,u=1-t;
+        return {x:u*u*u*enter.x+3*u*u*t*controlA.x+3*u*t*t*controlB.x+t*t*t*exit.x,
+          y:u*u*u*enter.y+3*u*u*t*controlA.y+3*u*t*t*controlB.y+t*t*t*exit.y};
+      });
+      if(curve.every(safe))break;
+      radius*=.5;curve=[];
+    }
+    rounded.push(...(curve.length?curve:[b]));
+  }
+  rounded.push(points[points.length-1]);
+  return rounded;
+}
+
+/** cubic-bezier(.45, 0, .25, 1): unhurried departure, longer deceleration. */
+export function easeGuide(progress:number):number {
+  if(progress<=0)return 0;
+  if(progress>=1)return 1;
+  let low=0,high=1,t=progress;
+  for(let i=0;i<14;i++){
+    const u=1-t,x=3*u*u*t*.45+3*u*t*t*.25+t*t*t;
+    if(x<progress)low=t;else high=t;
+    t=(low+high)/2;
+  }
+  return 3*(1-t)*t*t+t*t*t;
+}
+
 export function pointOnRoute(route:GuideRoute,progress:number):Point {
+  if(route.points.length<2)return route.points[0];
   const distance=route.length*progress;
   let index=1;while(index<route.distances.length-1&&route.distances[index]<distance)index++;
   const a=route.points[index-1],b=route.points[index];

@@ -1,0 +1,36 @@
+/* ThreadSherpa brand tokens — mirrors tokens.json v2.0 */
+:root {
+  /* Surface */
+  --ts-obsidian: #100F15;
+  --ts-night: #0B1017;
+  --ts-panel: #191722;
+  --ts-border: #272435;
+  --ts-raised: #1E1C29;
+
+  /* Mascot palette */
+  --ts-mascot-amber: #F2A74B;
+  --ts-mascot-amber-deep: #DB8C3A;
+  --ts-mascot-pear: #D7F59C;
+  --ts-mascot-sage: #A8BF79;
+  --ts-mascot-sage-deep: #6D8245;
+  --ts-mascot-boot: #B46A29;
+  --ts-mascot-visor: #24212C;
+  --ts-mascot-cream: #F2EDE3;
+  --ts-mascot-cream-shadow: #E3DDD1;
+
+  /* Text & Copy */
+  --ts-text-primary: #F2EDE3;
+  --ts-text-muted: #9D95A5;
+  --ts-text-faint: #6E6777;
+
+  /* Status & Verification */
+  --ts-status-verified: #D7F59C;
+  --ts-status-investigating: #F2A74B;
+  --ts-status-quiet: #6E6777;
+  --ts-status-escalated: #E0483C;
+
+  /* Typography */
+  --ts-font-display: "Waschkueche", "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --ts-font-body: "Uncut", "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --ts-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}

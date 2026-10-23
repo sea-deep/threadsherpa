@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none" role="img" aria-label="ThreadSherpa Saved Answer Note">
+  <title>ThreadSherpa Saved Answer Note</title>
+  <g transform="rotate(-4 100 100)">
+    <!-- Shadow -->
+    <rect x="42" y="32" width="124" height="142" rx="14" fill="#09090D" opacity="0.3"/>
+    <!-- Note paper -->
+    <rect x="38" y="26" width="124" height="142" rx="14" fill="#F2EDE3" stroke="#E3DDD1" stroke-width="3"/>
+    <!-- Status badge: Answer packed -->
+    <rect x="52" y="44" width="76" height="26" rx="7" fill="#D7F59C"/>
+    <path d="M62 57l4.5 4.5L78 50" stroke="#252C1B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M86 54h18" stroke="#252C1B" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M86 60h12" stroke="#252C1B" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- Knowledge text lines -->
+    <path d="M52 88h96" stroke="#A8BF79" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M52 108h84" stroke="#A8BF79" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M52 128h92" stroke="#A8BF79" stroke-width="4.5" stroke-linecap="round"/>
+    <path d="M52 148h54" stroke="#A8BF79" stroke-width="4.5" stroke-linecap="round"/>
+  </g>
+</svg>

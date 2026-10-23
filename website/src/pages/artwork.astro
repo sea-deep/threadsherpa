@@ -1,15 +1,398 @@
 ---
 import Base from '../layouts/Base.astro';
 import Guide from '../components/Guide.astro';
+
+const elements = [
+  {
+    name: 'Trail Pack',
+    role: 'Carries verified answers',
+    desc: 'The alpine green pack holding moderator-approved knowledge.',
+    preview: '/brand/backpack-512.png',
+    svg: '/brand/backpack.svg',
+    png: '/brand/backpack-512.png',
+  },
+  {
+    name: 'Saved Answer Note',
+    role: 'Approved knowledge card',
+    desc: 'The physical note marked "Answer packed" with verification badge.',
+    preview: '/brand/answer-note-512.png',
+    svg: '/brand/answer-note.svg',
+    png: '/brand/answer-note-512.png',
+  },
+  {
+    name: 'Trail Cairn',
+    role: 'Route marker',
+    desc: 'Three balanced stones marking a solved fork on the trail.',
+    preview: '/brand/cairn-512.png',
+    svg: '/brand/cairn.svg',
+    png: '/brand/cairn-512.png',
+  },
+  {
+    name: 'Visor Badge',
+    role: 'Compact mascot icon',
+    desc: 'The amber hood and calm dark visor for favicons and chips.',
+    preview: '/brand/mascot-face-512.png',
+    svg: '/brand/mascot-face.svg',
+    png: '/brand/mascot-face-512.png',
+  },
+  {
+    name: 'Switchback Mark',
+    role: 'Geometric chevron identity',
+    desc: 'Three rising chevrons: Investigate, Verify, and Remember.',
+    preview: '/brand/mark-512.png',
+    svg: '/brand/mark.svg',
+    png: '/brand/mark-512.png',
+  },
+  {
+    name: 'Brand Sheet',
+    role: 'Complete design board',
+    desc: '1600 × 1200 overview of marks, mascot, palette, and typography.',
+    preview: '/brand/brand-sheet.png',
+    png: '/brand/brand-sheet.png',
+  },
+];
 ---
-<Base description="Download the ThreadSherpa project cover, avatar and editable trail-guide mascot.">
+
+<Base description="Download the ThreadSherpa repository cover, avatar, editable trail-guide mascot, and all brand elements.">
   <section class="artwork-page wrap">
-    <div class="artwork-opening"><div><h1>Project artwork.</h1><p>The little guide, packed and ready.</p></div><Guide label="ThreadSherpa's amber trail guide with a green backpack" /></div>
-    <img class="artwork-cover" src="/brand/repository-thumbnail-1280x640.png" width="1280" height="640" alt="ThreadSherpa. A Discord bot for repeat questions. The guide rests beside a note marked Answer packed." />
-    <div class="artwork-downloads"><div><h2>Repository cover</h2><p>1280 × 640 PNG. Ready for GitHub’s social preview or a project post.</p><a href="/brand/repository-thumbnail-1280x640.png" download="threadsherpa-cover.png">Download cover <span aria-hidden="true">↗</span></a></div><div><h2>Project avatar</h2><p>512 × 512 PNG. The same guide at icon size, for GitLab and Discord.</p><a href="/brand/project-avatar-512.png" download="threadsherpa-avatar.png">Download avatar <span aria-hidden="true">↗</span></a></div><div><h2>Editable mascot</h2><p>Vector SVG. Crisp at any size, with named parts for animation.</p><a href="/brand/guide.svg" download="threadsherpa-guide.svg">Download SVG <span aria-hidden="true">↗</span></a></div></div>
-    <p class="artwork-license">Project artwork is included under the <a href="/LICENSE.txt">Apache 2.0 license</a>.</p>
+    <div class="artwork-opening">
+      <div>
+        <h1>Project artwork & brand.</h1>
+        <p>The trail guide mascot, repository cover, and all brand elements.</p>
+      </div>
+      <Guide label="ThreadSherpa's amber trail guide with a green backpack" />
+    </div>
+
+    <!-- Repository Cover -->
+    <div class="artwork-cover-block">
+      <img
+        class="artwork-cover"
+        src="/brand/repository-thumbnail-1280x640.png"
+        width="1280"
+        height="640"
+        alt="ThreadSherpa. A Discord bot for repeat questions. The guide rests beside a note marked Answer packed."
+      />
+    </div>
+
+    <!-- Core Repository Artwork -->
+    <div class="artwork-downloads">
+      <div class="download-card">
+        <h2>Repository cover</h2>
+        <p>1280 × 640 PNG. Ready for GitHub and GitLab social previews or project posts.</p>
+        <a href="/brand/repository-thumbnail-1280x640.png" download="threadsherpa-cover.png">
+          Download cover <span aria-hidden="true">↗</span>
+        </a>
+      </div>
+      <div class="download-card">
+        <h2>Project avatar</h2>
+        <p>512 × 512 PNG. The trail guide framed for GitHub, GitLab, and Discord bots.</p>
+        <a href="/brand/project-avatar-512.png" download="threadsherpa-avatar.png">
+          Download avatar <span aria-hidden="true">↗</span>
+        </a>
+      </div>
+      <div class="download-card">
+        <h2>The Mascot</h2>
+        <p>Vector SVG. Crisp at any size with semantic layers for animation and scaling.</p>
+        <div class="multi-links">
+          <a href="/brand/guide.svg" download="threadsherpa-guide.svg">
+            Download SVG <span aria-hidden="true">↗</span>
+          </a>
+          <a href="/brand/mascot-512.png" download="threadsherpa-mascot.png">
+            512px PNG <span aria-hidden="true">↗</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Brand Elements Section -->
+    <div class="elements-section">
+      <div class="section-heading">
+        <h2>Brand &amp; character elements</h2>
+        <p>Individual components of the ThreadSherpa brand identity system.</p>
+      </div>
+
+      <div class="elements-grid">
+        {elements.map((item) => (
+          <div class="element-card">
+            <div class="element-preview">
+              <img src={item.preview} alt={item.name} loading="lazy" />
+            </div>
+            <div class="element-body">
+              <div class="element-role">{item.role}</div>
+              <h3>{item.name}</h3>
+              <p>{item.desc}</p>
+              <div class="element-actions">
+                {item.svg && (
+                  <a href={item.svg} download={`threadsherpa-${item.name.toLowerCase().replace(/\s+/g, '-')}.svg`}>
+                    SVG <span aria-hidden="true">↗</span>
+                  </a>
+                )}
+                <a href={item.png} download={`threadsherpa-${item.name.toLowerCase().replace(/\s+/g, '-')}.png`}>
+                  PNG <span aria-hidden="true">↗</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+
+    <!-- Guidelines and License -->
+    <div class="artwork-footer-box">
+      <div>
+        <h3>Design tokens &amp; specification</h3>
+        <p>Get the complete JSON palette and CSS custom properties.</p>
+      </div>
+      <div class="token-links">
+        <a href="/brand/tokens.json" download="threadsherpa-tokens.json">tokens.json <span aria-hidden="true">↗</span></a>
+        <a href="/brand/tokens.css" download="threadsherpa-tokens.css">tokens.css <span aria-hidden="true">↗</span></a>
+      </div>
+    </div>
+
+    <p class="artwork-license">
+      Project artwork and character elements are included under the <a href="/LICENSE.txt">Apache 2.0 license</a>.
+    </p>
   </section>
 </Base>
+
 <style>
-  .artwork-page{padding-block:80px 100px}.artwork-opening{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:50px}.artwork-opening h1{font-size:clamp(42px,6vw,80px);letter-spacing:-.04em;line-height:1.05}.artwork-opening p{font-size:19px;color:var(--page-muted);margin-top:22px}.artwork-cover{display:block;width:100%;height:auto;border-radius:12px}.artwork-downloads{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:50px;margin-top:54px}.artwork-downloads h2{font-size:26px;letter-spacing:-.025em}.artwork-downloads p{font-size:17px;line-height:1.6;margin-top:18px;color:var(--page-muted)}.artwork-downloads a{display:inline-flex;align-items:center;gap:20px;min-height:48px;margin-top:20px;color:var(--pear);text-decoration:none;font-size:17px}.artwork-downloads a span{transition:transform .2s}.artwork-downloads a:hover span{transform:translate(2px,-2px)}.artwork-license{margin-top:65px;font-size:16px;color:var(--page-muted)}@media(max-width:700px){.artwork-page{padding-top:40px}.artwork-opening{align-items:start}.artwork-opening :global(.guide){width:82px}.artwork-opening p{font-size:17px}.artwork-downloads{grid-template-columns:1fr;gap:35px;margin-top:35px}.artwork-downloads a{margin-top:12px}.artwork-cover{border-radius:7px}}
+  .artwork-page {
+    padding-block: 80px 100px;
+  }
+  .artwork-opening {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+    margin-bottom: 50px;
+  }
+  .artwork-opening h1 {
+    font-size: clamp(42px, 6vw, 80px);
+    letter-spacing: -0.04em;
+    line-height: 1.05;
+  }
+  .artwork-opening p {
+    font-size: 19px;
+    color: var(--page-muted);
+    margin-top: 18px;
+  }
+  .artwork-cover-block {
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid var(--border-subtle, #272435);
+    background: #100f15;
+  }
+  .artwork-cover {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+
+  /* Three primary downloads */
+  .artwork-downloads {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 36px;
+    margin-top: 48px;
+  }
+  .download-card {
+    background: #16141F;
+    border: 1px solid var(--border-subtle, #272435);
+    border-radius: 12px;
+    padding: 30px 28px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+  .download-card h2 {
+    font-size: 24px;
+    letter-spacing: -0.025em;
+  }
+  .download-card p {
+    font-size: 16px;
+    line-height: 1.6;
+    margin-top: 12px;
+    color: var(--page-muted);
+    flex-grow: 1;
+  }
+  .download-card a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 20px;
+    color: var(--pear);
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: 500;
+  }
+  .download-card a span {
+    transition: transform 0.2s;
+  }
+  .download-card a:hover span {
+    transform: translate(2px, -2px);
+  }
+  .multi-links {
+    display: flex;
+    gap: 20px;
+    align-items: center;
+  }
+
+  /* Elements Section */
+  .elements-section {
+    margin-top: 72px;
+  }
+  .section-heading h2 {
+    font-size: clamp(30px, 4vw, 42px);
+    letter-spacing: -0.03em;
+  }
+  .section-heading p {
+    font-size: 17px;
+    color: var(--page-muted);
+    margin-top: 10px;
+  }
+  .elements-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 28px;
+    margin-top: 32px;
+  }
+  .element-card {
+    background: #14121B;
+    border: 1px solid #252232;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: border-color 0.2s;
+  }
+  .element-card:hover {
+    border-color: #3B374E;
+  }
+  .element-preview {
+    height: 190px;
+    background: #0E0D13;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    border-bottom: 1px solid #201E2B;
+  }
+  .element-preview img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+  .element-body {
+    padding: 22px;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+  }
+  .element-role {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--pear);
+    margin-bottom: 6px;
+  }
+  .element-body h3 {
+    font-size: 20px;
+    letter-spacing: -0.02em;
+    color: #F2EDE3;
+  }
+  .element-body p {
+    font-size: 15px;
+    line-height: 1.5;
+    color: var(--page-muted);
+    margin-top: 8px;
+    flex-grow: 1;
+  }
+  .element-actions {
+    display: flex;
+    gap: 16px;
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid #1E1C28;
+  }
+  .element-actions a {
+    color: var(--pear);
+    text-decoration: none;
+    font-size: 15px;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .element-actions a span {
+    transition: transform 0.2s;
+  }
+  .element-actions a:hover span {
+    transform: translate(2px, -2px);
+  }
+
+  /* Tokens Box */
+  .artwork-footer-box {
+    margin-top: 56px;
+    background: #16141F;
+    border: 1px solid #272435;
+    border-radius: 12px;
+    padding: 26px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 24px;
+  }
+  .artwork-footer-box h3 {
+    font-size: 19px;
+  }
+  .artwork-footer-box p {
+    font-size: 15px;
+    color: var(--page-muted);
+    margin-top: 6px;
+  }
+  .token-links {
+    display: flex;
+    gap: 18px;
+  }
+  .token-links a {
+    color: var(--pear);
+    text-decoration: none;
+    font-size: 15px;
+    font-family: var(--font-mono, monospace);
+  }
+
+  .artwork-license {
+    margin-top: 50px;
+    font-size: 15px;
+    color: var(--page-muted);
+  }
+
+  @media (max-width: 960px) {
+    .artwork-downloads {
+      grid-template-columns: 1fr;
+    }
+    .elements-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .artwork-footer-box {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .artwork-page {
+      padding-top: 40px;
+    }
+    .artwork-opening {
+      align-items: flex-start;
+    }
+    .artwork-opening :global(.guide) {
+      width: 72px;
+    }
+    .elements-grid {
+      grid-template-columns: 1fr;
+    }
+  }
 </style>

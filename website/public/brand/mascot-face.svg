@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none" role="img" aria-label="ThreadSherpa Mascot Visor">
+  <title>ThreadSherpa Mascot Visor</title>
+  <g transform="translate(10, 5) scale(0.85)">
+    <!-- Hood -->
+    <path d="M106 14c-10-1-20 6-27 14C51 53 21 88 14 122c-7 33 11 60 42 65 21 4 61 4 84 0 31-5 50-29 44-61-6-36-35-80-58-101-6-6-13-10-20-11z" fill="#F2A74B"/>
+    <path d="M131 40c21 29 36 60 40 88 5 29-9 46-32 52 31-4 51-28 45-59-5-30-29-64-53-81z" fill="#DB8C3A"/>
+    <!-- Knit brow stitches -->
+    <path d="m86 58 15-10 15 10m-24 9 9-6 9 6" stroke="#B46A29" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Dark Visor Plate -->
+    <path d="M47 117c1-24 19-38 48-38h15c28 0 45 15 48 39l1 15c2 21-12 34-35 36-15 3-32 3-48 0-22-2-38-15-33-36z" fill="#24212C"/>
+    <!-- Eyes -->
+    <g fill="#F2EDE3">
+      <rect x="70" y="117" width="11" height="18" rx="5.5"/>
+      <rect x="121" y="117" width="11" height="18" rx="5.5"/>
+    </g>
+  </g>
+</svg>

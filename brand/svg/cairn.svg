@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none" role="img" aria-label="ThreadSherpa Trail Cairn Marker">
+  <title>ThreadSherpa Trail Cairn Marker</title>
+  <ellipse cx="100" cy="180" rx="76" ry="10" fill="#09090D" opacity="0.35"/>
+  <!-- Base boulder -->
+  <path d="M34 154c0-20 26-32 66-32s66 12 66 32c0 16-24 26-66 26s-66-10-66-26z" fill="#24212C"/>
+  <path d="M48 150c12-10 32-15 52-15s40 5 52 15c-12 6-32 10-52 10s-40-4-52-10z" fill="#322E3D"/>
+  <!-- Mid stone -->
+  <path d="M52 112c0-16 22-26 48-26s48 10 48 26c0 14-20 22-48 22s-48-8-48-22z" fill="#DB8C3A"/>
+  <path d="M64 108c8-8 22-12 36-12s28 4 36 12c-8 6-22 9-36 9s-28-3-36-9z" fill="#F2A74B"/>
+  <!-- Summit stone -->
+  <path d="M70 70c0-14 14-22 30-22s30 8 30 22c0 12-14 18-30 18s-30-6-30-18z" fill="#A8BF79"/>
+  <path d="M78 66c4-6 12-9 22-9s18 3 22 9c-4 4-12 6-22 6s-18-2-22-6z" fill="#D7F59C"/>
+  <!-- Route marker top cairn stone -->
+  <ellipse cx="100" cy="38" rx="14" ry="10" fill="#D7F59C"/>
+  <circle cx="98" cy="36" r="3" fill="#252C1B"/>
+</svg>
