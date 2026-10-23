@@ -35,6 +35,22 @@ The bot reads the thread context. A clear “that worked” can resolve the case
 
 These captures show the working bot in a Campfire test server. The replies used Paper Instruments and saved knowledge in MongoDB Atlas.
 
+## Manage saved answers
+
+Run `/memory` as an administrator or configured moderator. The panel is visible only to you. Search saved answers, choose one to edit or remove, or add a new answer without finding an old message.
+
+Already have FAQs? Choose **Import FAQs** and paste them:
+
+```markdown
+## Where do I submit?
+Post your public repository in #submissions.
+
+## Do I need a video?
+A video is optional.
+```
+
+Review the preview, then choose **Save answers**. Imports accept up to 10 answers and 4,000 characters at a time; duplicate saves are skipped. You can set a source, the conditions an answer applies to, and an expiry. Expired answers stay in the panel for review but are excluded from replies. Edits affect future replies; they do not broadcast corrections into older threads.
+
 ## Run the bot
 
 Requires Node.js 22+, MongoDB, and [Ollama](https://ollama.com/download). The [setup guide](docs/SETUP.md) has the Discord and Atlas links, permissions, and forum-channel steps.
@@ -99,6 +115,7 @@ Knowledge is scoped to the server and can be edited, removed, or given an expiry
 | `/memory` | Browse, add, edit, or import saved answers in a private moderator panel. |
 | `/answers` | Find or remove saved guidance. |
 | `/queue` | Review waiting questions and repeated gaps. |
+| `/sources` | List the documentation URLs configured for this server. |
 | `/stats` | View questions, confirmed solves, and handoffs. |
 
 ## Development
@@ -110,6 +127,8 @@ npm run build
 ```
 
 `npm run demo` runs a fixture-based flow without Discord or paid inference. `npm run verify:atlas` checks persistence and real vector queries using temporary synthetic records. Generated reports stay local.
+
+To check real model behavior on a small set of synthetic support questions, run `npm run eval:local` or `npm run eval:paper`. The Paper run uses API credit. These checks cover paraphrases, scope, expiry, unsupported questions, and corrections; they are smoke checks, not a production accuracy benchmark.
 
 The Astro website lives in `website/` and needs Node.js 22.23.4 or newer:
 
