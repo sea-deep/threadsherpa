@@ -62,12 +62,16 @@ const saveButton = document.querySelector<HTMLButtonElement>('[data-save-answer]
 const saveIllustration = document.querySelector<HTMLElement>('[data-save-illustration]')!;
 let saved = false;
 let noteTween: gsap.core.Tween | undefined;
+document.querySelector('#saved-reply .discord-message')?.addEventListener('contextmenu', event => {
+    event.preventDefault();
+    saveButton.focus({ preventScroll: true });
+}, { signal });
 saveButton.addEventListener('click', () => {
     saved = !saved;
     saveButton.setAttribute('aria-pressed', String(saved));
     saveIllustration.classList.toggle('is-saved', saved);
     document.querySelector('[data-save-label]')!.textContent = saved ? 'Answer saved' : 'Save this answer';
-    document.querySelector('[data-save-status]')!.textContent = saved ? 'Approved' : 'Original reply';
+    document.querySelector('[data-save-status]')!.textContent = saved ? 'Answer saved.' : '';
     noteTween?.kill();
     if (saved && !paused())
         noteTween = gsap.fromTo('.save-note', { y: 0, x: -45, rotate: -8, autoAlpha: 1 }, { y: 105, x: 0, rotate: 12, autoAlpha: 0, duration: .8, ease: 'power2.inOut' });
@@ -77,6 +81,18 @@ document.querySelector('[data-show-source]')?.addEventListener('click', () => {
         return;
     gsap.fromTo('.moderator-reply', { scale: .98 }, { scale: 1, duration: .5, ease: 'power2.out', delay: .25, clearProps: 'transform' });
 }, { signal });
+const exampleSolve = document.querySelector<HTMLButtonElement>('[data-example-solve]')!;
+const exampleHelp = document.querySelector<HTMLButtonElement>('[data-example-help]')!;
+function finishExample(action: 'solve' | 'help') {
+    exampleSolve.disabled = true;
+    exampleHelp.disabled = true;
+    if (action === 'solve') exampleSolve.textContent = 'Marked solved';
+    else exampleHelp.textContent = 'Queued';
+    document.querySelector('[data-example-status]')!.textContent = action === 'solve'
+        ? 'Question marked as solved.' : 'Question queued for a moderator.';
+}
+exampleSolve.addEventListener('click', () => finishExample('solve'), { signal });
+exampleHelp.addEventListener('click', () => finishExample('help'), { signal });
 // The saved note responds to the pointer, while the question and reply stay still.
 // The connection endpoints belong to the untransformed layout, so their routes
 // remain attached when the note tilts.
