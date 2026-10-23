@@ -8,7 +8,7 @@ const author = { moderator: 'Moderator', member: 'Member', bot: 'ThreadSherpa' }
 ---
 <div class:list={['discord-message', `discord-message--${kind}`]}>
   <div class:list={['discord-avatar', `discord-avatar--${kind}`]} aria-hidden="true">
-    {kind === 'bot' ? <img src="/brand/avatar.svg" width="40" height="40" alt="" /> : <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="12" r="5" fill="currentColor"/><path d="M6 28v-2a10 10 0 0 1 20 0v2" fill="currentColor"/></svg>}
+    {kind === 'bot' ? <img class="discord-bot-mark" src="/brand/mark.svg" width="40" height="40" alt="" /> : <svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="12" r="5" fill="currentColor"/><path d="M6 28v-2a10 10 0 0 1 20 0v2" fill="currentColor"/></svg>}
   </div>
   <div class="discord-message__content">
     <div class="discord-byline"><span class="discord-author">{author}</span>{kind === 'bot' && <span class="discord-app"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="m2 6 2.5 2.5L10 3" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>APP</span>}<span class="discord-time">Today at {time}</span></div>

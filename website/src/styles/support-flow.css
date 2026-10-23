@@ -50,9 +50,6 @@
 .save-action button[aria-pressed="true"]>svg{opacity:1;color:#7ed9a0}
 .answer-stamp{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
 .answer-stamp:empty{display:none}
-.save-companion{position:absolute;right:-20px;bottom:0;z-index:3;display:flex;align-items:center;gap:10px}
-.save-companion .guide{width:145px}
-.saved-caption{font-size:15px;max-width:9ch;line-height:1.4;color:var(--pear)}
 .save-note{position:absolute;right:88px;top:180px;width:30px;height:38px;color:var(--pear);opacity:0;z-index:4;pointer-events:none}
 .moderator-reply:target{outline:2px solid var(--pear);outline-offset:6px}
 .support-repeat{background:#1a1820;padding-block:100px 70px;position:relative;overflow:clip}
@@ -71,8 +68,6 @@
 .memory-note .discord-time{margin-left:0}
 .match-confirmation{display:flex;align-items:center;gap:7px;font:15px/1.4 var(--font-body);color:var(--pear);padding:2px 16px 16px}
 .match-confirmation svg{flex:none}
-.repeat-guide{position:absolute;bottom:-15px;right:-25px;pointer-events:none}
-.repeat-guide .guide{width:155px}
 .forum-thread{overflow:hidden}
 .forum-kind{margin-left:auto;color:var(--discord-muted);font-size:14px;font-weight:400}
 .forum-question h3{font-size:24px;font-weight:700;line-height:1.25;letter-spacing:-.015em;padding:24px 20px 6px;color:#f2f3f5}
@@ -90,8 +85,6 @@
 .repeat-footnote{font-size:17px;line-height:1.6;color:var(--page-muted);text-align:right;margin-top:30px}
 .quiet-illustration{display:grid;grid-template-columns:1fr 1fr;align-items:center;position:relative;min-height:340px;gap:10px}
 .uncovered-question{grid-column:1/-1;justify-self:start;background:#24212c;padding:16px 21px;border-radius:10px;font-size:21px;transform:rotate(-4deg);margin-left:20px}
-.quiet-companion{justify-self:center;align-self:start}
-.quiet-companion .guide{width:190px}
 .no-reply-mark{display:flex;flex-direction:column;align-items:center;gap:15px;color:var(--page-muted);font-size:17px}
 .no-reply-mark svg{width:62px;height:62px;opacity:.6}
 .support-inside{padding-block:80px 90px;scroll-margin-top:40px}
@@ -131,7 +124,6 @@
  .support-problem,.support-save,.support-quiet{gap:40px}.support-copy h2,.repeat-opening h2,.inside-opening h2{font-size:clamp(40px,5.4vw,60px)}
  .repeat-map{gap:55px;grid-template-columns:minmax(0,.9fr) minmax(0,1.3fr)}
  .repeat-opening{display:block}.repeat-opening>p{font-size:18px;margin-top:24px;max-width:48ch}
- .repeat-guide{right:-15px}.repeat-guide .guide{width:140px}.save-companion{right:0}.save-companion .guide{width:125px}
  .discord-channel__thread{display:none}.save-action{margin-left:16px;max-width:calc(100% - 32px)}
  .memory-note .discord-message{grid-template-columns:28px minmax(0,1fr);gap:8px;padding:14px 12px}.memory-note .discord-avatar{width:28px;height:28px}.memory-note .discord-author{font-size:15px}.memory-note .discord-channel{padding-inline:12px}.match-confirmation{font-size:14px;padding-inline:12px}
  .forum-question h3{font-size:23px;padding:20px 16px 4px}
@@ -141,20 +133,19 @@
  .support-problem,.support-save,.support-quiet{grid-template-columns:minmax(0,1fr);padding-block:70px 80px;gap:38px}
  .support-copy h2,.repeat-opening h2,.inside-opening h2{font-size:43px}.support-copy>p{font-size:18px;margin-top:24px}
  .support-copy>.support-secondary{font-size:16px;margin-top:18px}
- .save-illustration{min-height:430px;padding-top:0}.save-companion{right:0;bottom:0}.save-companion .guide{width:132px}.save-note{right:75px;top:155px}
+ .save-illustration{min-height:430px;padding-top:0}.save-note{right:75px;top:155px}
  .discord-channel__thread{display:inline}.discord-message{gap:10px;padding:16px 14px}.save-action{margin-left:64px;max-width:calc(100% - 78px)}
  .support-repeat{padding-block:70px 50px}.repeat-opening{display:block}.repeat-opening>p{font-size:18px;margin-top:24px}
  .repeat-map{grid-template-columns:1fr;gap:36px;padding-top:48px;padding-bottom:0}
  .match-memory{padding:0 50px 0 0;margin-bottom:10px;max-width:400px}
  .memory-note .discord-message{padding:16px 14px;grid-template-columns:32px minmax(0,1fr);gap:10px}.memory-note .discord-avatar{width:32px;height:32px}.memory-note .discord-channel{padding-inline:14px}.memory-note .discord-author{font-size:16px}.match-confirmation{padding-inline:14px;font-size:15px}
- .repeat-guide{right:-10px;bottom:-22px}.repeat-guide .guide{width:115px}
  .discord-actions button{min-height:44px}
  .repeat-footnote{text-align:left;font-size:17px;margin-top:28px}
- .support-quiet{display:flex;flex-direction:column-reverse;gap:25px}.support-quiet .support-copy{width:100%}.quiet-illustration{width:100%;min-height:300px}.quiet-companion .guide{width:170px}.uncovered-question{font-size:19px;margin-left:10px}
+ .support-quiet{display:flex;flex-direction:column-reverse;gap:25px}.support-quiet .support-copy{width:100%}.quiet-illustration{width:100%;min-height:300px}.uncovered-question{font-size:19px;margin-left:10px}
  .support-inside{padding-block:50px 65px}.inside-opening{margin-bottom:40px}.inside-opening>p{font-size:18px;margin-top:23px}
  .code-path{grid-template-columns:1fr;gap:28px}.code-path li{padding-top:20px}.code-path h3{font-size:25px;margin-top:14px}.code-path p{font-size:16px;margin-top:12px;max-width:38ch}
  .quiet-branch{margin-top:32px}.memory-detail{margin-top:30px}
 }
 @media(max-width:350px){
- .support-copy h2,.repeat-opening h2,.inside-opening h2{font-size:38px}.discord-channel__thread{display:none}.discord-message{grid-template-columns:32px minmax(0,1fr);gap:8px;padding:14px 12px}.discord-avatar{width:32px;height:32px}.discord-byline{gap:4px}.discord-time{margin-left:0}.discord-embed{padding:10px}.discord-embed p{font-size:16px}.save-action{margin-left:52px;max-width:calc(100% - 64px)}.save-action button{font-size:14px;padding-inline:6px}.save-action button>img{width:22px;height:22px}.match-memory{padding-right:32px}.memory-note .discord-message{grid-template-columns:28px minmax(0,1fr);padding-inline:12px;gap:8px}.memory-note .discord-avatar{width:28px;height:28px}.memory-note .discord-message p{font-size:16px}.memory-note .discord-author{font-size:15px}.match-confirmation{font-size:14px}.repeat-guide .guide{width:95px}.forum-question h3{font-size:22px}.discord-actions button{padding-inline:12px}
+ .support-copy h2,.repeat-opening h2,.inside-opening h2{font-size:38px}.discord-channel__thread{display:none}.discord-message{grid-template-columns:32px minmax(0,1fr);gap:8px;padding:14px 12px}.discord-avatar{width:32px;height:32px}.discord-byline{gap:4px}.discord-time{margin-left:0}.discord-embed{padding:10px}.discord-embed p{font-size:16px}.save-action{margin-left:52px;max-width:calc(100% - 64px)}.save-action button{font-size:14px;padding-inline:6px}.save-action button>img{width:22px;height:22px}.match-memory{padding-right:32px}.memory-note .discord-message{grid-template-columns:28px minmax(0,1fr);padding-inline:12px;gap:8px}.memory-note .discord-avatar{width:28px;height:28px}.memory-note .discord-message p{font-size:16px}.memory-note .discord-author{font-size:15px}.match-confirmation{font-size:14px}.forum-question h3{font-size:22px}.discord-actions button{padding-inline:12px}
 }

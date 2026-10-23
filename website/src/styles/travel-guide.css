@@ -1,0 +1,42 @@
+/* One guide, with resting places built into the page's composition. */
+.guide-stop { width:144px; height:144px; visibility:hidden; pointer-events:none; flex:none; }
+.guide-layer { position:fixed; inset:0; z-index:6; overflow:clip; pointer-events:none; contain:paint; }
+.travel-guide { position:absolute; top:0; left:0; width:160px; height:160px; visibility:hidden; pointer-events:none; transform-origin:center; will-change:transform; }
+.travel-guide[data-ready] { visibility:visible; }
+.travel-guide > .guide { position:relative; width:100%; z-index:1; }
+.travel-guide__shadow { position:absolute; width:55%; height:7%; left:20%; bottom:4%; border-radius:50%; background:#0003; filter:blur(4px); }
+.travel-guide[data-moving="true"] .travel-guide__shadow { opacity:.35; }
+.travel-guide[data-direction="left"] > .guide { transform:scaleX(-1); }
+.intro-guide-stop { position:absolute; right:1%; bottom:18px; width:148px; height:148px; }
+.problem-guide-stop { margin:20px 0 -35px 22%; width:132px; height:132px; }
+.save-guide-stop { position:absolute; right:8px; bottom:0; }
+.repeat-guide-stop { position:absolute; right:-20px; bottom:-12px; width:132px; height:132px; }
+.quiet-guide-stop { justify-self:center; align-self:start; width:180px; height:180px; }
+.inside-opening { position:relative; padding-right:160px; }
+.inside-guide-stop { position:absolute; top:0; right:20px; width:120px; height:120px; }
+.limits-guide-stop { margin:24px 0 0 26%; width:120px; height:120px; }
+.origin-guide-stop { margin:18px 0 0 auto; width:100px; height:100px; }
+.setup-guide-stop { margin:24px 0 0; width:120px; height:120px; }
+.intro__bottom p { max-width:49ch; }
+.discord-avatar .discord-bot-mark { object-fit:contain; padding:9px; box-sizing:border-box; }
+.save-action button > img { padding:3px; box-sizing:border-box; }
+.footer-signature > img { flex:none; object-fit:contain; }
+@media (max-width:1000px) {
+  .problem-guide-stop { margin-left:12%; }
+  .save-guide-stop { width:125px; height:125px; }
+  .repeat-guide-stop { right:-10px; width:115px; height:115px; }
+  .inside-guide-stop { right:0; }
+}
+@media (max-width:650px) {
+  .intro-guide-stop { right:0; bottom:12px; width:108px; height:108px; }
+  .problem-guide-stop { margin:8px 0 -12px auto; width:98px; height:98px; }
+  .save-guide-stop { right:8px; width:125px; height:125px; }
+  .match-memory { padding:0 0 100px; }
+  .repeat-guide-stop { right:0; bottom:0; width:102px; height:102px; }
+  .quiet-guide-stop { width:155px; height:155px; }
+  .inside-opening { padding-right:0; }
+  .inside-guide-stop { position:relative; margin:12px 0 -20px auto; width:100px; height:100px; }
+  .limits-guide-stop { margin:12px 0 -15px auto; width:94px; height:94px; }
+  .origin-guide-stop { width:94px; height:94px; margin-top:12px; }
+  .setup-guide-stop { width:110px; height:110px; margin-top:20px; }
+}

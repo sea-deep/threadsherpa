@@ -1,5 +1,6 @@
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+import { createGuideTraveler } from './travel-guide';
 gsap.registerPlugin(ScrollTrigger);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 const paused = () => reduced.matches || document.documentElement.classList.contains('motion-paused');
@@ -44,8 +45,6 @@ function configureMotion() {
         const matchTrace = gsap.timeline({ scrollTrigger: { trigger: repeatMap, start: 'top 85%', end: 'bottom 45%', scrub: .7 } });
         matchTrace.fromTo('.connection-current[data-connection="question"]', { strokeDashoffset: 1 }, { strokeDashoffset: 0, autoRound: false, duration: 1, ease: 'none' })
             .fromTo('.connection-current[data-connection="reply"]', { strokeDashoffset: 1 }, { strokeDashoffset: 0, autoRound: false, duration: 1, ease: 'none' });
-        gsap.fromTo('.repeat-guide', { y: 18 }, { y: -12, ease: 'none', scrollTrigger: { trigger: '.support-repeat', start: 'top bottom', end: 'bottom top', scrub: 1 } });
-        gsap.fromTo('.quiet-companion', { y: 12, rotate: 3 }, { y: -8, rotate: -3, ease: 'none', scrollTrigger: { trigger: '.support-quiet', start: 'top bottom', end: 'bottom top', scrub: 1 } });
         for (const item of document.querySelectorAll<HTMLElement>('[data-reveal]')) {
             gsap.from(item, { y: 18, opacity: .45, duration: .6, ease: 'power3.out', scrollTrigger: { trigger: item, start: 'top 94%', once: true } });
         }
@@ -73,8 +72,14 @@ saveButton.addEventListener('click', () => {
     document.querySelector('[data-save-label]')!.textContent = saved ? 'Answer saved' : 'Save this answer';
     document.querySelector('[data-save-status]')!.textContent = saved ? 'Answer saved.' : '';
     noteTween?.kill();
-    if (saved && !paused())
-        noteTween = gsap.fromTo('.save-note', { y: 0, x: -45, rotate: -8, autoAlpha: 1 }, { y: 105, x: 0, rotate: 12, autoAlpha: 0, duration: .8, ease: 'power2.inOut' });
+    if (saved && !paused()) {
+        const note = document.querySelector<SVGElement>('.save-note')!;
+        gsap.set(note, { x:0, y:0, rotate:0, scale:1, autoAlpha:1 });
+        const start = note.getBoundingClientRect();
+        const guide = document.querySelector('[data-travel-guide]')!.getBoundingClientRect();
+        noteTween = gsap.to(note, { x:guide.left + guide.width * .75 - start.left,
+            y:guide.top + guide.height * .65 - start.top, rotate:12, scale:.35, autoAlpha:0, duration:.7, ease:'power2.inOut' });
+    }
 }, { signal });
 document.querySelector('[data-show-source]')?.addEventListener('click', () => {
     if (paused())
@@ -160,5 +165,6 @@ window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer
 resizeField();
 positionConnections();
 configureMotion();
+createGuideTraveler(signal, paused);
 void document.fonts.ready.then(() => { positionConnections(); ScrollTrigger.refresh(); });
 window.addEventListener('pagehide', () => { lifecycle.abort(); motion?.revert(); visibleObserver.disconnect(); fieldObserver.disconnect(); cancelAnimationFrame(frame); noteTween?.kill(); noteTilt.tween.kill(); noteLean.tween.kill(); clearTimeout(resizeTimer); }, { once: true });

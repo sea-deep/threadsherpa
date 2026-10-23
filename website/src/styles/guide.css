@@ -13,20 +13,6 @@
 .guide[data-pose="check"] .guide-eyes { transform:scaleY(.68); }
 .guide[data-pose="sleep"]:hover .guide-eyes { transform:scaleY(1); }
 .guide .guide-eyes { transition:transform 220ms ease-out; }
-.brand .brand-guide { width:34px; margin:-6px 0; }
-.footer-signature .footer-guide { width:34px; margin:-6px 0; }
-.intro-guide { position:absolute; right:6%; bottom:24px; display:flex; align-items:center; gap:16px; z-index:2; }
-.intro-guide .guide { width:132px; }
-.intro-guide:hover .guide-eyes { transform:scaleY(1); }
-@media(max-width:1000px) {
- .intro-guide { bottom:5px; right:0; }
- .intro-guide .guide { width:110px; }
-}
-@media(max-width:600px) {
- .intro-guide { bottom:5px; gap:4px; }
- .intro-guide .guide { width:94px; }
- .brand .brand-guide { width:31px; }
-}
 @media(prefers-reduced-motion:no-preference) {
   .guide.in-view .guide-body { animation:guide-breathe 4s ease-in-out infinite; }
   .guide.in-view .guide-eyes { animation:guide-blink 6.8s infinite; }

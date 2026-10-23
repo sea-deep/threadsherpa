@@ -1,10 +1,9 @@
 ---
-import Guide from './Guide.astro';
 import DiscordMessage from './DiscordMessage.astro';
 import '../styles/support-flow.css';
 ---
 <section class="support-problem wrap" id="how-it-works" aria-labelledby="problem-title">
-  <div class="support-copy"><h2 id="problem-title">People miss<br />earlier answers.</h2><p>A moderator has already answered. The next person starts another thread and asks the same question.</p></div>
+  <div class="support-copy"><h2 id="problem-title">People miss<br />earlier answers.</h2><p>A moderator has already answered. The next person starts another thread and asks the same question.</p><div class="guide-stop problem-guide-stop" data-guide-stop="problem" data-guide-pose="check" aria-hidden="true"></div></div>
   <div class="problem-forum discord-surface" data-ui>
     <div class="discord-channel"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" aria-hidden="true"><path d="M5 4h15v11H12l-5 4v-4H5V4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 8h7M9 11h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>support</span><span class="forum-kind">Forum</span></div>
     <div class="problem-posts">
@@ -32,11 +31,11 @@ import '../styles/support-flow.css';
       <DiscordMessage><p>Post your public GitHub repository in <span class="channel-mention">#submissions</span>.</p></DiscordMessage>
       <div class="save-action" aria-label="Message Apps menu">
         <div class="save-app-path"><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><rect x="2" y="2" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="12" y="2" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="2" y="12" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/><rect x="12" y="12" width="6" height="6" rx="1" stroke="currentColor" stroke-width="1.5"/></svg>Apps<svg class="save-app-chevron" viewBox="0 0 16 16" width="16" height="16" fill="none" aria-hidden="true"><path d="m6 4 4 4-4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        <button type="button" data-save-answer aria-pressed="false"><img src="/brand/avatar.svg" width="24" height="24" alt=""/><span data-save-label>Save this answer</span><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+        <button type="button" data-save-answer aria-pressed="false"><img src="/brand/mark.svg" width="24" height="24" alt=""/><span data-save-label>Save this answer</span><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
         <span class="answer-stamp" data-save-status aria-live="polite"></span>
       </div>
     </div>
-    <div class="save-companion"><Guide pose="save"/><span class="saved-caption">Saved answer</span></div>
+    <div class="guide-stop save-guide-stop" data-guide-stop="save" data-guide-pose="save" aria-hidden="true"></div>
     <svg class="save-note" viewBox="0 0 40 50" aria-hidden="true"><rect x="2" y="2" width="36" height="46" rx="6" fill="currentColor"/><path d="M12 15h16M12 24h12M12 33h16" stroke="#100f15" stroke-width="3" stroke-linecap="round"/></svg>
   </div>
 </section>
@@ -61,7 +60,7 @@ import '../styles/support-flow.css';
           <DiscordMessage><p>Post your public GitHub repository in <span class="channel-mention">#submissions</span>.</p></DiscordMessage>
           <div class="match-confirmation"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Covers this question</div>
         </div>
-        <div class="repeat-guide"><Guide pose="reply"/></div>
+        <div class="guide-stop repeat-guide-stop" data-guide-stop="reply" data-guide-pose="reply" aria-hidden="true"></div>
       </aside>
       <div class="forum-thread discord-surface" data-ui>
         <div class="discord-channel"><svg viewBox="0 0 24 24" width="23" height="23" fill="none" aria-hidden="true"><path d="M5 4h15v11H12l-5 4v-4H5V4Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 8h7M9 11h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>support</span><span class="forum-kind">Forum</span></div>
@@ -85,6 +84,6 @@ import '../styles/support-flow.css';
 </section>
 
 <section class="support-quiet wrap" aria-labelledby="quiet-title">
-  <div class="quiet-illustration" role="img" aria-label="When no saved answer covers a question, the bot sends no reply and leaves it for a moderator."><span class="uncovered-question">No matching saved answer</span><div class="quiet-companion"><Guide pose="sleep"/></div><span class="no-reply-mark"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10h40v30H29L12 54V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="m18 17 28 17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg><span>No bot reply</span></span></div>
+  <div class="quiet-illustration" role="img" aria-label="When no saved answer covers a question, the bot sends no reply and leaves it for a moderator."><span class="uncovered-question">No matching saved answer</span><div class="guide-stop quiet-guide-stop" data-guide-stop="quiet" data-guide-pose="sleep" aria-hidden="true"></div><span class="no-reply-mark"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10h40v30H29L12 54V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="m18 17 28 17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg><span>No bot reply</span></span></div>
   <div class="support-copy"><h2 id="quiet-title">Questions it<br />can’t answer.</h2><p>When no saved answer covers a question, the bot stays quiet and queues it for a moderator.</p></div>
 </section>
