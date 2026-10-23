@@ -1,0 +1,15 @@
+---
+import Base from '../layouts/Base.astro';
+import Guide from '../components/Guide.astro';
+---
+<Base description="Download the ThreadSherpa project cover, avatar and editable trail-guide mascot.">
+  <section class="artwork-page wrap">
+    <div class="artwork-opening"><div><h1>Project artwork.</h1><p>The little guide, packed and ready.</p></div><Guide label="ThreadSherpa's amber trail guide with a green backpack" /></div>
+    <img class="artwork-cover" src="/brand/repository-thumbnail-1280x640.png" width="1280" height="640" alt="ThreadSherpa. A Discord bot for repeat questions. The guide rests beside a note marked Answer packed." />
+    <div class="artwork-downloads"><div><h2>Repository cover</h2><p>1280 × 640 PNG. Ready for GitHub’s social preview or a project post.</p><a href="/brand/repository-thumbnail-1280x640.png" download="threadsherpa-cover.png">Download cover <span aria-hidden="true">↗</span></a></div><div><h2>Project avatar</h2><p>512 × 512 PNG. The same guide at icon size, for GitLab and Discord.</p><a href="/brand/project-avatar-512.png" download="threadsherpa-avatar.png">Download avatar <span aria-hidden="true">↗</span></a></div><div><h2>Editable mascot</h2><p>Vector SVG. Crisp at any size, with named parts for animation.</p><a href="/brand/guide.svg" download="threadsherpa-guide.svg">Download SVG <span aria-hidden="true">↗</span></a></div></div>
+    <p class="artwork-license">Project artwork is included under the <a href="/LICENSE.txt">Apache 2.0 license</a>.</p>
+  </section>
+</Base>
+<style>
+  .artwork-page{padding-block:80px 100px}.artwork-opening{display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:50px}.artwork-opening h1{font-size:clamp(42px,6vw,80px);letter-spacing:-.04em;line-height:1.05}.artwork-opening p{font-size:19px;color:var(--page-muted);margin-top:22px}.artwork-cover{display:block;width:100%;height:auto;border-radius:12px}.artwork-downloads{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:50px;margin-top:54px}.artwork-downloads h2{font-size:26px;letter-spacing:-.025em}.artwork-downloads p{font-size:17px;line-height:1.6;margin-top:18px;color:var(--page-muted)}.artwork-downloads a{display:inline-flex;align-items:center;gap:20px;min-height:48px;margin-top:20px;color:var(--pear);text-decoration:none;font-size:17px}.artwork-downloads a span{transition:transform .2s}.artwork-downloads a:hover span{transform:translate(2px,-2px)}.artwork-license{margin-top:65px;font-size:16px;color:var(--page-muted)}@media(max-width:700px){.artwork-page{padding-top:40px}.artwork-opening{align-items:start}.artwork-opening :global(.guide){width:82px}.artwork-opening p{font-size:17px}.artwork-downloads{grid-template-columns:1fr;gap:35px;margin-top:35px}.artwork-downloads a{margin-top:12px}.artwork-cover{border-radius:7px}}
+</style>

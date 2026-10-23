@@ -23,6 +23,16 @@ let storyTrigger: ScrollTrigger | undefined;
 let motionContext: gsap.Context | undefined;
 let step = -1;
 let solved = false;
+let compactClock: gsap.core.Timeline | undefined;
+let compactVisible = false;
+let compactHeld = false;
+const storyPlay = document.querySelector<HTMLButtonElement>('[data-story-play]')!;
+
+function syncCompactPlayback() {
+  compactClock?.paused(!compactVisible || compactHeld || paused() || document.hidden);
+  storyPlay.textContent = compactHeld ? 'Play conversation' : 'Pause conversation';
+  storyPlay.setAttribute('aria-pressed', String(compactHeld));
+}
 
 // Register only the two message components this page uses. The conversation
 // remains readable as ordinary HTML if the component chunk cannot load.
@@ -99,12 +109,14 @@ function setStep(next: number, enhanced = true) {
   const activeScene = next < 2 ? "source" : next < 4 ? "next" : "unknown";
   scenes.forEach((scene) => {
     const hidden = enhanced && scene.dataset.chatScene !== activeScene;
+    scene.hidden = story.classList.contains('is-compact') && hidden;
     scene.setAttribute("aria-hidden", String(hidden));
     scene.inert = hidden;
   });
   document
     .querySelector<HTMLElement>("[data-human-answer]")!
     .setAttribute("aria-hidden", String(enhanced && next === 0));
+  document.querySelector<HTMLElement>('[data-human-answer]')!.hidden = story.classList.contains('is-compact') && next === 0;
   document.querySelectorAll<HTMLElement>("[data-follow-up]").forEach((el) => {
     el.hidden = enhanced && next !== 3;
   });
@@ -121,6 +133,8 @@ function setStep(next: number, enhanced = true) {
         : "Can I update my project?";
   document.querySelector("[data-thread-status]")!.textContent =
     next === 4 ? "Waiting" : next >= 2 && solved ? "Resolved" : "Open";
+  const companion = document.querySelector<HTMLElement>(".story-guide");
+  if (companion) companion.dataset.pose = next === 1 ? "save" : next === 2 || next === 3 ? "reply" : next === 4 ? "quiet" : "sleep";
   closeSource();
   const nextScene = document.querySelector<HTMLElement>(".chat-scene--next")!;
   requestAnimationFrame(() =>
@@ -132,14 +146,28 @@ function setStep(next: number, enhanced = true) {
 }
 
 function configureMotion() {
+  compactClock?.kill();
+  compactClock = undefined;
   motionContext?.revert();
   storyTrigger = undefined;
   story.classList.remove("is-enhanced");
+  story.classList.remove('is-compact');
   step = -1;
   const enhanced = !paused() && innerHeight >= 850 && innerWidth >= 900;
+  const compact = !paused() && !enhanced;
   story.classList.toggle("is-enhanced", enhanced);
-  stage.toggleAttribute("data-ui", enhanced);
-  setStep(0, enhanced);
+  story.classList.toggle('is-compact', compact);
+  storyPlay.hidden = !compact;
+  stage.toggleAttribute("data-ui", enhanced || compact);
+  setStep(0, enhanced || compact);
+  if (compact) {
+    compactClock = gsap.timeline({ paused:true, repeat:-1 });
+    chapters.forEach((_, index) => {
+      compactClock!.call(() => setStep(index), [], index * 6.5);
+      compactClock!.to({}, { duration:6.5 }, index * 6.5);
+    });
+    syncCompactPlayback();
+  }
   motionContext = gsap.context(() => {
     if (enhanced) {
       storyTrigger = ScrollTrigger.create({
@@ -171,31 +199,6 @@ function configureMotion() {
       );
     }
     if (!paused()) {
-      document
-        .querySelectorAll<HTMLElement>("[data-architecture-step]")
-        .forEach((item, index) => {
-          ScrollTrigger.create({
-            trigger: item,
-            start: "top 55%",
-            end: "bottom 55%",
-            onEnter: () => selectNode(index),
-            onEnterBack: () => selectNode(index),
-          });
-        });
-      gsap.fromTo(
-        "[data-wire-current]",
-        { "--wire-progress": 0 },
-        {
-          "--wire-progress": 1,
-          ease: "none",
-          scrollTrigger: {
-            trigger: ".architecture-steps",
-            start: "top 65%",
-            end: "bottom 65%",
-            scrub: 0.5,
-          },
-        },
-      );
       gsap.to("[data-hero-line]", {
         y: -28,
         ease: "none",
@@ -219,7 +222,6 @@ function configureMotion() {
         });
     }
   });
-  measureWires();
   ScrollTrigger.refresh();
   syncField();
 }
@@ -228,7 +230,12 @@ chapters.forEach((button, index) =>
   button.addEventListener(
     "click",
     () => {
-      if (storyTrigger) {
+      if (compactClock) {
+        compactHeld = true;
+        compactClock.pause(index * 6.5 + .01);
+        setStep(index);
+        syncCompactPlayback();
+      } else if (storyTrigger) {
         window.scrollTo({
           top:
             storyTrigger.start +
@@ -250,6 +257,10 @@ chapters.forEach((button, index) =>
 );
 
 sourceButton.setAttribute("aria-expanded", "false");
+storyPlay.addEventListener('click', () => { compactHeld = !compactHeld; syncCompactPlayback(); }, {signal});
+const compactObserver = new IntersectionObserver(([entry]) => { compactVisible = entry.isIntersecting; syncCompactPlayback(); }, {threshold:.3});
+compactObserver.observe(stage);
+document.addEventListener('visibilitychange', syncCompactPlayback, {signal});
 sourceButton.addEventListener(
   "click",
   () => {
@@ -372,82 +383,6 @@ document.querySelector(".intro")?.addEventListener(
 );
 document.addEventListener("visibilitychange", syncField, { signal });
 
-// The diagram follows the implementation. Nodes can also be inspected directly,
-// without requiring a precise scroll position or a pointer.
-interface ArchitectureStep {
-  text: string;
-  file: string;
-}
-const architectureSteps: ArchitectureStep[] = JSON.parse(
-  document.querySelector("[data-architecture-data]")!.textContent!,
-);
-const nodeButtons = [
-  ...document.querySelectorAll<HTMLButtonElement>("[data-machine-node]"),
-];
-const architecture = document.querySelector<HTMLElement>(
-  "[data-architecture]",
-)!;
-let selectedNode = 0;
-let quietRoute = false;
-function selectNode(index: number) {
-  selectedNode = index;
-  architecture.dataset.active = String(index);
-  nodeButtons.forEach((button, i) =>
-    button.setAttribute("aria-pressed", String(i === index)),
-  );
-  document.querySelector("[data-node-detail]")!.textContent =
-    quietRoute && index === 2
-      ? "No usable evidence was found. Skip the reply-generation call instead of asking the model to guess."
-      : architectureSteps[index].text;
-  document.querySelector("[data-node-file]")!.textContent =
-    architectureSteps[index].file;
-  document.querySelector<HTMLAnchorElement>("[data-node-source]")!.href =
-    "https://github.com/sea-deep/threadsherpa/blob/main/" +
-    architectureSteps[index].file;
-}
-nodeButtons.forEach((button, index) =>
-  button.addEventListener("click", () => selectNode(index), { signal }),
-);
-document.querySelectorAll<HTMLButtonElement>("[data-route]").forEach((button) =>
-  button.addEventListener(
-    "click",
-    () => {
-      quietRoute = button.dataset.route === "quiet";
-      architecture.dataset.route = quietRoute ? "quiet" : "answer";
-      document
-        .querySelectorAll<HTMLButtonElement>("[data-route]")
-        .forEach((other) =>
-          other.setAttribute("aria-pressed", String(other === button)),
-        );
-      document.querySelector("[data-route-outcome]")!.textContent = quietRoute
-        ? "No usable evidence → skip generation → quiet moderator queue."
-        : "Reply in Discord, with the original source.";
-      selectNode(selectedNode);
-    },
-    { signal },
-  ),
-);
-function measureWires() {
-  const route = document.querySelector<HTMLElement>("[data-machine-route]")!;
-  const svg = document.querySelector<SVGSVGElement>("[data-machine-wires]")!;
-  const rect = route.getBoundingClientRect();
-  const ports = [...route.querySelectorAll<HTMLElement>(".machine-port")].map(
-    (port) => {
-      const r = port.getBoundingClientRect();
-      return {
-        x: r.left - rect.left + r.width / 2,
-        y: r.top - rect.top + r.height / 2,
-      };
-    },
-  );
-  svg.setAttribute("viewBox", `0 0 ${rect.width} ${rect.height}`);
-  const d = ports
-    .map((point, i) => `${i ? "L" : "M"} ${point.x} ${point.y}`)
-    .join(" ");
-  document
-    .querySelectorAll<SVGPathElement>("[data-wire-base],[data-wire-current]")
-    .forEach((path) => path.setAttribute("d", d));
-}
 document.querySelector("[data-story-save]")?.addEventListener(
   "click",
   () => {
@@ -455,7 +390,11 @@ document.querySelector("[data-story-save]")?.addEventListener(
       document.querySelector<HTMLButtonElement>("[data-story-save]")!;
     button.classList.add("is-saved");
     button.setAttribute("aria-label", "Answer saved. Show the next question.");
-    if (storyTrigger)
+    if (compactClock) {
+      compactClock.pause(2 * 6.5 + .01);
+      setStep(2);
+      syncCompactPlayback();
+    } else if (storyTrigger)
       window.scrollTo({
         top:
           storyTrigger.start + (storyTrigger.end - storyTrigger.start) * 0.48,
@@ -485,7 +424,6 @@ document
       { signal },
     ),
   );
-selectNode(0);
 
 let resizeTimer = 0;
 window.addEventListener(
@@ -511,7 +449,6 @@ if (!paused())
     clearProps: "opacity",
   });
 void document.fonts.ready.then(() => {
-  measureWires();
   ScrollTrigger.refresh();
 });
 window.addEventListener(
@@ -522,6 +459,8 @@ window.addEventListener(
     cancelAnimationFrame(frame);
     fieldObserver.disconnect();
     messageObserver.disconnect();
+    compactObserver.disconnect();
+    compactClock?.kill();
     motionContext?.revert();
   },
   { once: true },

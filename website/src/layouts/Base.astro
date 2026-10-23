@@ -7,22 +7,28 @@ import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
 
 interface Props {
-  title?: string;
   description?: string;
 }
 
 const {
-  title = 'ThreadSherpa | Discord answers that keep helping',
   description = "Save a moderator's answer once. ThreadSherpa uses those facts to write short, sourced replies for the next Discord question. Open source and self-hosted.",
 } = Astro.props;
+const title = 'ThreadSherpa';
+const canonical = new URL(Astro.url.pathname, 'https://threadsherpa.onrender.com');
+const socialImage = 'https://threadsherpa.onrender.com/brand/social-card-1280x630.png';
+const imageAlt = 'ThreadSherpa, a Discord bot for repeat questions. An amber trail guide carries a saved answer in a green backpack.';
+const noIndex = Astro.url.pathname.startsWith('/404') || Astro.url.pathname.startsWith('/try');
 
 const structuredData = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
   name: 'ThreadSherpa',
+  url: 'https://threadsherpa.onrender.com/',
+  image: 'https://threadsherpa.onrender.com/brand/project-avatar-512.png',
+  sameAs: ['https://github.com/sea-deep/threadsherpa', 'https://gitlab.com/wdipak/threadsherpa'],
   applicationCategory: 'DeveloperApplication',
   operatingSystem: 'macOS, Linux, Windows',
-  description,
+  description: 'A self-hosted Discord support bot that saves moderator-approved knowledge and writes short, sourced replies for repeat questions.',
   license: 'https://www.apache.org/licenses/LICENSE-2.0',
   isAccessibleForFree: true,
 };
@@ -35,6 +41,9 @@ const structuredData = {
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    <meta name="robots" content={noIndex ? 'noindex, follow' : 'index, follow'} />
+    <meta name="application-name" content="ThreadSherpa" />
+    <link rel="canonical" href={canonical.href} />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#100F15" />
 
@@ -44,16 +53,20 @@ const structuredData = {
 
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ThreadSherpa" />
+    <meta property="og:locale" content="en_US" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:image" content="/brand/social-card-1280x630.png" />
+    <meta property="og:url" content={canonical.href} />
+    <meta property="og:image" content={socialImage} />
+    <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="1280" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="ThreadSherpa. A Discord bot for repeat questions." />
+    <meta property="og:image:alt" content={imageAlt} />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content={title} />
     <meta name="twitter:description" content={description} />
-    <meta name="twitter:image" content="/brand/social-card-1280x630.png" />
+    <meta name="twitter:image" content={socialImage} />
+    <meta name="twitter:image:alt" content={imageAlt} />
 
     <link rel="preload" href="/fonts/uncut-variable.woff2" as="font" type="font/woff2" crossorigin />
     <script is:inline>

@@ -1,12 +1,14 @@
 # ThreadSherpa
 
+![ThreadSherpa, a small trail guide carrying a saved answer](website/public/brand/repository-thumbnail-1280x640.png)
+
 A Discord support bot that remembers the useful answer and helps the next person asking the same thing.
 
 I built it after seeing repeated support questions in the **MLH Discord**. Account names, missing offer codes, student benefits: different people needed the same information, but the answer was often buried in another thread. Moderators should not have to do that lookup every time.
 
 ThreadSherpa keeps the human answer as knowledge. An LLM writes a short reply for each new question, with a source. When the saved facts do not cover it, the bot stays quiet and leaves it for a moderator.
 
-[Website](https://threadsherpa.onrender.com) · [Setup guide](docs/SETUP.md) · [GitLab mirror](https://gitlab.com/wdipak/threadsherpa) · [Security](SECURITY.md)
+[Website](https://threadsherpa.onrender.com) · [Project artwork](https://threadsherpa.onrender.com/artwork/) · [Setup guide](docs/SETUP.md) · [GitLab mirror](https://gitlab.com/wdipak/threadsherpa) · [Security](SECURITY.md)
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/sea-deep/threadsherpa)
 

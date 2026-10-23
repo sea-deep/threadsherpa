@@ -1,0 +1,55 @@
+.guide { display:inline-block; width:120px; flex:none; line-height:0; }
+.guide svg { width:100%; height:auto; overflow:visible; }
+.guide-body { transform-origin:50% 88%; }
+.guide-eyes { transform-box:fill-box; transform-origin:center; }
+.guide-eye { transform-box:fill-box; transform-origin:center; }
+.guide-hand { transform-box:fill-box; transform-origin:0% 50%; }
+.guide-scarf { transform-box:fill-box; transform-origin:50% 0%; }
+.guide-foot { transform-box:fill-box; transform-origin:50% 0%; }
+.guide[data-pose="sleep"] .guide-eyes { transform:scaleY(.18); }
+.guide[data-pose="sleep"] .guide-note { opacity:0; }
+.guide[data-pose="quiet"] .guide-note { opacity:0; }
+.guide[data-pose="quiet"] .guide-body { transform:rotate(-4deg); }
+.guide[data-pose="check"] .guide-eyes { transform:scaleY(.68); }
+.guide[data-pose="sleep"]:hover .guide-eyes { transform:scaleY(1); }
+.guide .guide-eyes { transition:transform 220ms ease-out; }
+.brand .brand-guide { width:34px; margin:-6px 0; }
+.footer-signature .footer-guide { width:34px; margin:-6px 0; }
+.intro-guide { position:absolute; right:6%; bottom:24px; display:flex; align-items:center; gap:16px; z-index:2; }
+.intro-guide .guide { width:132px; }
+.intro-guide > span { max-width:15ch; color:var(--page-muted); font-size:15px; line-height:1.5; }
+.intro-guide:hover .guide-eyes { transform:scaleY(1); }
+.story-composition .memory-token { background:transparent; border:0; padding:0; box-shadow:none; bottom:5px; right:-36px; gap:0; flex-direction:column; }
+.memory-token .story-guide { width:104px; }
+.memory-token > span:not(.guide) { color:var(--pear); font-size:14px; margin-top:-5px; }
+@media(max-width:1000px) {
+ .story-composition .memory-token { right:-16px; bottom:-34px; }
+ .memory-token .story-guide { width:85px; }
+ .intro-guide { bottom:5px; right:0; }
+ .intro-guide .guide { width:110px; }
+}
+@media(max-width:600px) {
+ .intro-guide { bottom:5px; gap:4px; }
+ .intro-guide .guide { width:94px; }
+ .intro-guide > span { font-size:14px; max-width:14ch; }
+ .story-composition .memory-token { display:none; }
+ .brand .brand-guide { width:31px; }
+}
+@media(prefers-reduced-motion:no-preference) {
+  .guide.in-view .guide-body { animation:guide-breathe 4s ease-in-out infinite; }
+  .guide.in-view .guide-eyes { animation:guide-blink 6.8s infinite; }
+  .guide.in-view[data-pose="sleep"] .guide-eyes { animation:none; }
+  .guide.in-view[data-pose="sleep"]:hover .guide-eyes { animation:guide-blink 6.8s infinite; }
+  .guide.in-view[data-pose="save"] .guide-hand { animation:guide-pack 2.8s ease-in-out infinite; }
+  .guide.in-view[data-pose="walk"] .guide-foot--left { animation:guide-step .75s ease-in-out infinite alternate; }
+  .guide.in-view[data-pose="walk"] .guide-foot--right { animation:guide-step .75s ease-in-out -.75s infinite alternate; }
+  .guide.in-view[data-pose="reply"] .guide-hand { animation:guide-offer 2.4s ease-in-out infinite; }
+  .guide.in-view .guide-scarf { animation:guide-scarf 4s ease-in-out infinite; }
+}
+@keyframes guide-breathe { 0%,100%{transform:translateY(0) rotate(-1deg)}50%{transform:translateY(-3px) rotate(1deg)} }
+@keyframes guide-blink { 0%,43%,47%,100%{transform:scaleY(1)}45%{transform:scaleY(.12)} }
+@keyframes guide-pack { 0%,100%{transform:rotate(0)}45%,65%{transform:rotate(-25deg) translateY(-5px)} }
+@keyframes guide-step { to{transform:rotate(12deg) translateY(-2px)} }
+@keyframes guide-offer { 0%,100%{transform:translateX(0)}45%,65%{transform:translateX(6px) rotate(-8deg)} }
+@keyframes guide-scarf { 0%,100%{transform:rotate(-3deg)}50%{transform:rotate(5deg)} }
+.motion-paused .guide *, .guide:not(.in-view) * { animation-play-state:paused!important; }

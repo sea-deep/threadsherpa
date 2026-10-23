@@ -16,3 +16,6 @@ Scene portraits from Unsplash, under the Unsplash License.
 https://unsplash.com/license
 
 Discord captures show the working ThreadSherpa bot in the author's server.
+
+ThreadSherpa trail-guide mascot and repository artwork drawn for this project.
+Vector source: /brand/guide.svg. Apache 2.0, like the project.
