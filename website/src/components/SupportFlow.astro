@@ -3,28 +3,56 @@ import Guide from './Guide.astro';
 import '../styles/support-flow.css';
 ---
 <section class="support-save wrap" id="how-it-works" aria-labelledby="save-title">
-  <div class="support-copy"><h2 id="save-title">Save a useful reply.</h2><p>Right-click a useful moderator reply.<br />Choose <strong>Save this answer</strong>.</p><p class="support-secondary">That is what becomes memory. Ordinary chat stays chat.</p></div>
+  <div class="support-copy"><h2 id="save-title">Save a useful reply.</h2><p>Right-click a useful moderator reply.<br />Choose <strong>Save this answer</strong>.</p><p class="support-secondary">The bot reuses only the replies a moderator saves.</p></div>
   <div class="save-illustration" data-save-illustration>
-    <div class="moderator-reply" data-ui><div class="reply-byline"><span class="moderator-avatar" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="11" r="6" fill="currentColor"/><path d="M5 29v-3a11 11 0 0 1 22 0v3" fill="currentColor"/></svg></span><span>Moderator</span><span class="answer-stamp" data-save-status>Original reply</span></div><p>The answer you don’t<br />want to type again.</p><div class="save-action"><span class="save-app-path">Apps</span><button type="button" data-save-answer aria-pressed="false"><img src="/brand/guide.svg" width="28" height="28" alt=""/><span data-save-label>Save this answer</span><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
-    <div class="save-companion"><Guide pose="save"/><span class="saved-caption">Approved memory</span></div>
+    <div class="moderator-reply" id="saved-reply" tabindex="-1" data-ui><div class="reply-byline"><span class="moderator-avatar" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="11" r="6" fill="currentColor"/><path d="M5 29v-3a11 11 0 0 1 22 0v3" fill="currentColor"/></svg></span><span>Moderator</span><span class="answer-stamp" data-save-status>Original reply</span></div><p>Post your public GitHub repository in <span class="channel-mention">#submissions</span>.</p><div class="save-action"><span class="save-app-path">Apps</span><button type="button" data-save-answer aria-pressed="false"><img src="/brand/guide.svg" width="28" height="28" alt=""/><span data-save-label>Save this answer</span><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
+    <div class="save-companion"><Guide pose="save"/><span class="saved-caption">Saved answer</span></div>
     <svg class="save-note" viewBox="0 0 40 50" aria-hidden="true"><rect x="2" y="2" width="36" height="46" rx="6" fill="currentColor"/><path d="M12 15h16M12 24h12M12 33h16" stroke="#100f15" stroke-width="3" stroke-linecap="round"/></svg>
   </div>
 </section>
 
 <section class="support-repeat" aria-labelledby="repeat-title">
-  <div class="wrap"><div class="repeat-opening"><h2 id="repeat-title">The repeats are<br />the bot’s job.</h2><p>Different wording. The same saved facts. <br />A fresh, short reply with its source.</p></div>
-    <div class="repeat-map" data-repeat-map role="group" aria-label="Repeat questions meet approved memory. ThreadSherpa writes a short answer and links the original reply.">
-      <div class="repeat-questions"><span class="question-slip">The same question</span><span class="question-slip">Asked another way</span><span class="question-slip">And again</span></div>
-      <div class="repeat-route repeat-route--in" aria-hidden="true"><span></span><span></span><span></span></div>
-      <div class="repeat-guide"><Guide pose="reply"/><span>Saved facts</span></div>
-      <div class="repeat-route repeat-route--out" aria-hidden="true"><span></span><span></span><span></span></div>
-      <div class="supported-reply"><div class="reply-byline"><img src="/brand/avatar.svg" width="34" height="34" alt=""/><span>ThreadSherpa</span></div><p>A short reply.</p><a class="original-source" href="#how-it-works" data-show-source><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="m8 12 4-4m-5 2-2 2a3 3 0 0 0 4 4l3-3m1-3 2-2a3 3 0 0 0-4-4L8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Original moderator reply</a></div>
+  <div class="wrap">
+    <div class="repeat-opening">
+      <h2 id="repeat-title">The bot watches<br />the forum.</h2>
+      <p>After you save an answer, ThreadSherpa checks new forum posts. If a saved answer covers the question, it writes a reply and links the original.</p>
     </div>
-    <p class="repeat-footnote">Follow-ups use the conversation too. The bot keeps the context.</p>
+    <div class="repeat-map" data-repeat-map role="group" aria-label="A new forum question matches a saved moderator answer. ThreadSherpa replies in the thread and links that answer.">
+      <svg class="match-connections" aria-hidden="true">
+        <defs><marker id="match-arrow" markerWidth="7" markerHeight="7" refX="5" refY="3.5" orient="auto"><path d="m1 1 4 2.5L1 6" fill="none" stroke="currentColor" stroke-width="1.2"/></marker></defs>
+        <path class="connection-base" data-connection="question"/>
+        <path class="connection-base" data-connection="reply"/>
+        <path class="connection-current" data-connection="question" pathLength="1"/>
+        <path class="connection-current" data-connection="reply" pathLength="1"/>
+      </svg>
+      <aside class="match-memory">
+        <div class="memory-note" data-match-answer>
+          <div class="memory-note__heading"><svg viewBox="0 0 24 28" width="21" height="25" fill="none" aria-hidden="true"><rect x="2" y="2" width="20" height="24" rx="3" stroke="currentColor" stroke-width="1.7"/><path d="M7 9h10M7 14h7M7 19h10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span>Saved moderator reply</span></div>
+          <p>Post your public GitHub repository in <span class="channel-mention">#submissions</span>.</p>
+          <div class="match-confirmation"><svg viewBox="0 0 20 20" width="20" height="20" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>Covers this question</div>
+        </div>
+        <div class="repeat-guide"><Guide pose="reply"/></div>
+      </aside>
+      <div class="forum-thread" data-ui>
+        <div class="forum-heading"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true"><path d="M5 5h14v10H12l-5 4v-4H5V5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 9h6M9 12h3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><span>support</span><span class="forum-kind">Forum</span></div>
+        <div class="forum-question" data-match-question>
+          <div class="reply-byline"><span class="member-avatar" aria-hidden="true">M</span><span>Member</span><span class="new-post-label">New post</span></div>
+          <h3>Is a GitHub link enough to submit?</h3>
+        </div>
+        <div class="thread-replies">
+          <div class="supported-reply" data-match-reply>
+            <div class="reply-byline"><img src="/brand/avatar.svg" width="34" height="34" alt=""/><span>ThreadSherpa</span><span class="bot-badge">APP</span></div>
+            <p>Yes. Share your public GitHub repository in <span class="channel-mention">#submissions</span>.</p>
+            <a class="original-source" href="#saved-reply" data-show-source><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="m8 12 4-4m-5 2-2 2a3 3 0 0 0 4 4l3-3m1-3 2-2a3 3 0 0 0-4-4L8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Original moderator reply<span aria-hidden="true">↗</span></a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="repeat-footnote">For follow-up questions, the bot reads the earlier replies too.</p>
   </div>
 </section>
 
 <section class="support-quiet wrap" aria-labelledby="quiet-title">
-  <div class="quiet-illustration" role="img" aria-label="When saved knowledge does not cover a question, the bot sends no reply and leaves it for a moderator."><span class="uncovered-question">No saved answer</span><div class="quiet-companion"><Guide pose="sleep"/></div><span class="no-reply-mark"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10h40v30H29L12 54V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="m18 17 28 17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg><span>No bot reply</span></span></div>
-  <div class="support-copy"><h2 id="quiet-title">No answer?<br />No reply.</h2><p>Without useful evidence, it skips the model call and leaves the thread alone.</p><p class="support-secondary">The question waits for a moderator. No filler message.</p></div>
+  <div class="quiet-illustration" role="img" aria-label="When no saved answer covers a question, the bot sends no reply and leaves it for a moderator."><span class="uncovered-question">No matching saved answer</span><div class="quiet-companion"><Guide pose="sleep"/></div><span class="no-reply-mark"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10h40v30H29L12 54V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="m18 17 28 17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg><span>No bot reply</span></span></div>
+  <div class="support-copy"><h2 id="quiet-title">No match?<br />No bot reply.</h2><p>If none of the saved answers cover the question, the bot stays quiet.</p><p class="support-secondary">It queues the question for a moderator to answer.</p></div>
 </section>

@@ -5,12 +5,12 @@ import Guide from '../components/Guide.astro';
 import Mechanism from '../components/Mechanism.astro';
 
 ---
-<Base description="Save a moderator's reply. ThreadSherpa uses the saved facts to answer the next version of that question. See what it saves, how it replies, and when it stays quiet.">
+<Base description="Save a moderator's reply. ThreadSherpa watches your Discord forum, answers similar questions using saved replies, and links the original answer.">
   <section class="intro" id="top" aria-labelledby="intro-title">
     <div class="wrap intro__inner">
 
       <h1 id="intro-title"><span class="hero-line" data-hero-line>A Discord bot for{' '}</span><span class="hero-line hero-line--second" data-hero-line>repeat questions<span class="hero-period">.</span></span></h1>
-      <div class="intro__bottom"><p data-hero-copy>A moderator answers. You save the reply.<br />The bot handles repeat questions.</p><a class="scroll-cue" href="#how-it-works"><span>How it works</span><span class="scroll-cue__arrow" aria-hidden="true">↓</span></a></div>
+      <div class="intro__bottom"><p data-hero-copy>A moderator answers. You save the reply.<br />The bot replies to similar questions.</p><a class="scroll-cue" href="#how-it-works"><span>How it works</span><span class="scroll-cue__arrow" aria-hidden="true">↓</span></a></div>
       <div class="intro-guide"><Guide pose="sleep" /></div>
       <canvas class="thread-field" data-thread-field aria-hidden="true"></canvas>
 
@@ -21,7 +21,7 @@ import Mechanism from '../components/Mechanism.astro';
 
   <Mechanism />
 
-  <section class="limits-section wrap" aria-labelledby="limits-title"><div data-reveal><h2 id="limits-title">A few deliberate<br />limits.</h2></div><div class="limits-list"><details data-reveal><summary>It does not learn from every message.<span aria-hidden="true">+</span></summary><p>A moderator chooses what becomes memory. A busy channel, a joke, and an unreviewed suggestion stay conversation.</p></details><details data-reveal><summary>Changed rules need changed knowledge.<span aria-hidden="true">+</span></summary><p>Edit or remove the saved guidance. Future questions use the current facts. The bot does not broadcast corrections into old threads.</p></details><details data-reveal><summary>The model can still get things wrong.<span aria-hidden="true">+</span></summary><p>Replies include their source so a person can check them. Unsupported questions wait. An account or payment issue needs private human support.</p></details><details data-reveal><summary>You run the bot and choose the model.<span aria-hidden="true">+</span></summary><p>Use local Ollama inference, or Paper Instruments for replies with local embeddings. You also choose the database, support channels, and moderators.</p></details></div></section>
+  <section class="limits-section wrap" aria-labelledby="limits-title"><div data-reveal><h2 id="limits-title">A few deliberate<br />limits.</h2></div><div class="limits-list"><details data-reveal><summary>It does not learn from every message.<span aria-hidden="true">+</span></summary><p>A moderator chooses what becomes memory. A busy channel, a joke, and an unreviewed suggestion stay conversation.</p></details><details data-reveal><summary>When the rules change, update the saved answer.<span aria-hidden="true">+</span></summary><p>Edit or remove the saved guidance. Future questions use the current facts. The bot does not broadcast corrections into old threads.</p></details><details data-reveal><summary>The model can still get things wrong.<span aria-hidden="true">+</span></summary><p>Replies include their source so a person can check them. Unsupported questions wait. An account or payment issue needs private human support.</p></details><details data-reveal><summary>You run the bot and choose the model.<span aria-hidden="true">+</span></summary><p>Use local Ollama inference, or Paper Instruments for replies with local embeddings. You also choose the database, support channels, and moderators.</p></details></div></section>
 
   <section class="project-note wrap" data-reveal><p class="project-note__text">I built this after seeing the same support questions in the MLH Discord.</p><p class="project-note__after">Different people needed the same information, but the useful answer was buried in another thread.<br /><br />Made for the <a href="https://dev.to/challenges/hacktoberfest-week3-2026-10-19" target="_blank" rel="noopener noreferrer">Hacktoberfest Open-Source AI Challenge: Week 3</a> on DEV. The theme is Slow and Steady: build something that does the work so you don't have to. This is a hackathon project, so expect rough edges. Its job is simple: let a useful moderator answer help the next person too.</p></section>
 
