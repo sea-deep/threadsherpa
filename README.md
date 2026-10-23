@@ -18,26 +18,19 @@ The Render button deploys the website. The Discord bot runs separately. See [dep
 
 A moderator replies normally, then right-clicks the message and chooses **Apps → Save this answer**. That save is the approval. Saving the same knowledge again does not create another copy.
 
-![Saving a moderator's answer in Discord](docs/images/answer-saved.png)
+![Saving a moderator's answer in Discord](docs/images/minecraft-answer-saved.png)
 
 A new post can ask the same thing in different words. ThreadSherpa uses the saved facts to write a fresh reply, rather than pasting the old message.
 
-![ThreadSherpa answers a new question and links to the original guidance](docs/images/tailored-reply.png)
+![ThreadSherpa answers a new question and links to the original guidance](docs/images/minecraft-reply.png)
 
-<details>
-<summary>Follow-ups stay in the same conversation</summary>
-
-The bot reads the thread context. A clear “that worked” can resolve the case quietly. Failed advice is kept for a moderator, so it does not repeat the same suggestion.
-
-![ThreadSherpa handles a follow-up in the same thread](docs/images/follow-up.png)
-
-</details>
-
-These captures show the working bot in a Campfire test server. The replies used Paper Instruments and saved knowledge in MongoDB Atlas.
+These captures use a Minecraft support scenario in my test server, with separate participant and moderator accounts. The replies used Paper Instruments and saved answers in MongoDB Atlas.
 
 ## Manage saved answers
 
 Run `/memory` as an administrator or configured moderator. The panel is visible only to you. Search saved answers, choose one to edit or remove, or add a new answer without finding an old message.
+
+![The private saved-answer panel, filtered to Minecraft](docs/images/saved-answers.png)
 
 Already have FAQs? Choose **Import FAQs** and paste them:
 
