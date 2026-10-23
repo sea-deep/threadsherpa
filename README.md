@@ -147,4 +147,10 @@ Built for the [Hacktoberfest Open-Source AI Challenge: Week 3](https://dev.to/ch
 
 This is an independent hackathon project inspired by the MLH community. Expect rough edges. The open model path uses Gemma through Ollama; you can inspect the prompts, change the behavior, and keep synthesis local. Discord and Atlas still require network access.
 
-Apache-2.0. See [LICENSE](LICENSE).
+## Credits and license
+
+The bot and website code are Apache-2.0 licensed. See [LICENSE](LICENSE). Bundled typefaces retain their own licenses:
+
+- [Waschkueche](https://www.peter-wiegel.de/Waschkueche.html), copyright 2009 Peter Wiegel, is licensed under [Creative Commons Attribution 3.0 Germany](https://creativecommons.org/licenses/by/3.0/de/). The website serves a WOFF conversion.
+- Uncut Sans, copyright 2022 Kasper Nordkvist, uses the [SIL Open Font License 1.1](website/public/fonts/UncutSans-LICENSE.txt).
+- JetBrains Mono, copyright 2020 The JetBrains Mono Project Authors, uses the [SIL Open Font License 1.1](website/public/fonts/JetBrainsMono-LICENSE.txt).
