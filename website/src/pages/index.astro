@@ -7,12 +7,12 @@ import Mechanism from '../components/Mechanism.astro';
 ---
 <Base description="Save a moderator's reply. ThreadSherpa watches your Discord forum, answers similar questions using saved replies, and links the original answer.">
   <section class="intro" id="top" aria-labelledby="intro-title">
+    <canvas class="thread-field" data-thread-field aria-hidden="true"></canvas>
     <div class="wrap intro__inner">
 
       <h1 id="intro-title"><span class="hero-line" data-hero-line>A Discord bot for{' '}</span><span class="hero-line hero-line--second" data-hero-line>repeat questions<span class="hero-period">.</span></span></h1>
       <div class="intro__bottom"><p data-hero-copy>Save a moderator’s reply.<br />The bot uses it to answer similar questions.</p><a class="scroll-cue" href="#how-it-works"><span>How it works</span><span class="scroll-cue__arrow" aria-hidden="true">↓</span></a></div>
       <div class="intro-guide"><Guide pose="sleep" /></div>
-      <canvas class="thread-field" data-thread-field aria-hidden="true"></canvas>
 
     </div>
   </section>
