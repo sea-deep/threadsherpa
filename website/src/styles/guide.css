@@ -17,22 +17,14 @@
 .footer-signature .footer-guide { width:34px; margin:-6px 0; }
 .intro-guide { position:absolute; right:6%; bottom:24px; display:flex; align-items:center; gap:16px; z-index:2; }
 .intro-guide .guide { width:132px; }
-.intro-guide > span { max-width:15ch; color:var(--page-muted); font-size:15px; line-height:1.5; }
 .intro-guide:hover .guide-eyes { transform:scaleY(1); }
-.story-composition .memory-token { background:transparent; border:0; padding:0; box-shadow:none; bottom:5px; right:-36px; gap:0; flex-direction:column; }
-.memory-token .story-guide { width:104px; }
-.memory-token > span:not(.guide) { color:var(--pear); font-size:14px; margin-top:-5px; }
 @media(max-width:1000px) {
- .story-composition .memory-token { right:-16px; bottom:-34px; }
- .memory-token .story-guide { width:85px; }
  .intro-guide { bottom:5px; right:0; }
  .intro-guide .guide { width:110px; }
 }
 @media(max-width:600px) {
  .intro-guide { bottom:5px; gap:4px; }
  .intro-guide .guide { width:94px; }
- .intro-guide > span { font-size:14px; max-width:14ch; }
- .story-composition .memory-token { display:none; }
  .brand .brand-guide { width:31px; }
 }
 @media(prefers-reduced-motion:no-preference) {

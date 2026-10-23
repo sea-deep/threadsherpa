@@ -1,0 +1,30 @@
+---
+import Guide from './Guide.astro';
+import '../styles/support-flow.css';
+---
+<section class="support-save wrap" id="how-it-works" aria-labelledby="save-title">
+  <div class="support-copy"><h2 id="save-title">Save a useful reply.</h2><p>Right-click a useful moderator reply.<br />Choose <strong>Save this answer</strong>.</p><p class="support-secondary">That is what becomes memory. Ordinary chat stays chat.</p></div>
+  <div class="save-illustration" data-save-illustration>
+    <div class="moderator-reply" data-ui><div class="reply-byline"><span class="moderator-avatar" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><circle cx="16" cy="11" r="6" fill="currentColor"/><path d="M5 29v-3a11 11 0 0 1 22 0v3" fill="currentColor"/></svg></span><span>Moderator</span><span class="answer-stamp" data-save-status>Original reply</span></div><p>The answer you don’t<br />want to type again.</p><div class="save-action"><span class="save-app-path">Apps</span><button type="button" data-save-answer aria-pressed="false"><img src="/brand/guide.svg" width="28" height="28" alt=""/><span data-save-label>Save this answer</span><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="m4 10 4 4 8-8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>
+    <div class="save-companion"><Guide pose="save"/><span class="saved-caption">Approved memory</span></div>
+    <svg class="save-note" viewBox="0 0 40 50" aria-hidden="true"><rect x="2" y="2" width="36" height="46" rx="6" fill="currentColor"/><path d="M12 15h16M12 24h12M12 33h16" stroke="#100f15" stroke-width="3" stroke-linecap="round"/></svg>
+  </div>
+</section>
+
+<section class="support-repeat" aria-labelledby="repeat-title">
+  <div class="wrap"><div class="repeat-opening"><h2 id="repeat-title">The repeats are<br />the bot’s job.</h2><p>Different wording. The same saved facts. <br />A fresh, short reply with its source.</p></div>
+    <div class="repeat-map" data-repeat-map role="group" aria-label="Repeat questions meet approved memory. ThreadSherpa writes a short answer and links the original reply.">
+      <div class="repeat-questions"><span class="question-slip">The same question</span><span class="question-slip">Asked another way</span><span class="question-slip">And again</span></div>
+      <div class="repeat-route repeat-route--in" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="repeat-guide"><Guide pose="reply"/><span>Saved facts</span></div>
+      <div class="repeat-route repeat-route--out" aria-hidden="true"><span></span><span></span><span></span></div>
+      <div class="supported-reply"><div class="reply-byline"><img src="/brand/avatar.svg" width="34" height="34" alt=""/><span>ThreadSherpa</span></div><p>A short reply.</p><a class="original-source" href="#how-it-works" data-show-source><svg viewBox="0 0 20 20" width="18" height="18" fill="none" aria-hidden="true"><path d="m8 12 4-4m-5 2-2 2a3 3 0 0 0 4 4l3-3m1-3 2-2a3 3 0 0 0-4-4L8 7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>Original moderator reply</a></div>
+    </div>
+    <p class="repeat-footnote">Follow-ups use the conversation too. The bot keeps the context.</p>
+  </div>
+</section>
+
+<section class="support-quiet wrap" aria-labelledby="quiet-title">
+  <div class="quiet-illustration" role="img" aria-label="When saved knowledge does not cover a question, the bot sends no reply and leaves it for a moderator."><span class="uncovered-question">No saved answer</span><div class="quiet-companion"><Guide pose="sleep"/></div><span class="no-reply-mark"><svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M12 10h40v30H29L12 54V10Z" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="m18 17 28 17" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg><span>No bot reply</span></span></div>
+  <div class="support-copy"><h2 id="quiet-title">No answer?<br />No reply.</h2><p>Without useful evidence, it skips the model call and leaves the thread alone.</p><p class="support-secondary">The question waits for a moderator. No filler message.</p></div>
+</section>
