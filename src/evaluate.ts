@@ -5,11 +5,18 @@ import { createModelProvider } from './integrations/model/factory.js';
 import { loadConfig } from './config/env.js';
 import { PaperProvider } from './integrations/model/paper.provider.js';
 import { createDemoScenario } from './demo/scenario.js';
+import { instrumentModelProvider } from './integrations/model/traced.provider.js';
+import { initSentry } from './utils/sentry.js';
+import * as Sentry from '@sentry/node';
 
 // All questions, event names and answers below are synthetic, not program rules.
 const paper = process.argv.includes('--paper');
 if (!paper && !process.argv.includes('--local')) throw new Error('Choose --paper or --local. This evaluation uses a real model; no scripted accuracy scores.');
-const model = createModelProvider(loadConfig({ MODEL_PROVIDER: paper ? 'paper' : 'ollama' }));
+const config = loadConfig({ MODEL_PROVIDER: paper ? 'paper' : 'ollama' });
+// With SENTRY_DSN set, eval runs send the same agent traces as the bot. Paper traces itself.
+const traced = initSentry(config.SENTRY_DSN);
+const rawModel = createModelProvider(config);
+const model = traced && !paper ? instrumentModelProvider(rawModel, config.OLLAMA_MODEL, 'ollama') : rawModel;
 const s = await createDemoScenario(model);
 for (const item of [
   { knowledge_id: 'schedule', question_patterns: ['Where is the event schedule?', 'Where can I find session times?'], canonical_answer: 'The schedule is pinned in #event-info. Discord event timestamps display in your local timezone.' },
@@ -53,11 +60,12 @@ const failures = results.filter(r => !r.pass);
 const report = { recordedAt: new Date().toISOString(), provider: paper ? 'paperinstruments' : 'ollama', synthetic: true,
   passed: results.length - failures.length, total: results.length, wrongAnswerResponses: results.filter(r => r.expected !== 'respond with #event-info' && !r.expected.startsWith('respond with') && r.actualAction === 'respond').length,
   limitations: 'Small developer-written synthetic smoke evaluation. Checks routing and required answer fragments, not full factual accuracy, multilingual quality, independent judging or Discord/Atlas latency. Generation-call counts exclude embeddings and provider repairs.',
-  usage: model instanceof PaperProvider ? model.getUsage() : undefined, results };
+  usage: rawModel instanceof PaperProvider ? rawModel.getUsage() : undefined, results };
 const reportFlag = process.argv.indexOf('--report');
 const path = reportFlag >= 0 ? process.argv[reportFlag + 1] : `data/evaluation-${paper ? 'paper' : 'local'}.json`;
 if (!path || path.startsWith('--')) throw new Error('--report needs a path');
 await mkdir(dirname(path), { recursive: true });
 await writeFile(path, JSON.stringify(report, null, 2) + '\n');
 console.log(`${report.passed}/${report.total} checks passed; ${report.wrongAnswerResponses} unsupported answer responses. Saved ${path}.`);
+if (traced) await Sentry.flush(5000);
 if (failures.length) process.exitCode = 1;
