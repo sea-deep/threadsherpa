@@ -1,8 +1,13 @@
 ---
 import Base from '../layouts/Base.astro';
 import Campfire from '../components/Campfire.astro';
+import '../styles/try.css';
 ---
-<Base description="Try ThreadSherpa in a fictional community. Save an answer, ask a question, and inspect the source.">
-  <div class="wrap try-intro"><a href="/" class="back-link">Back to ThreadSherpa</a><h1>Try a support thread.</h1><p>Save Sam's reply, then ask a new question. This fictional server stays in your browser unless live mode is available.</p></div>
-  <div class="try-surface"><Campfire /></div>
+<Base app description="Try ThreadSherpa in a fictional community. Save an answer, ask a question, and inspect the source.">
+  <div class="workspace-bar">
+    <a href="/" aria-label="Back to ThreadSherpa"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 6-6 6 6 6M8 12h13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg> ThreadSherpa</a>
+    <h1>Campfire <span>· Interactive demo</span></h1>
+    <a href="/setup/" class="workspace-setup">Set up your bot <span aria-hidden="true">↗</span></a>
+  </div>
+  <div class="try-surface"><Campfire immersive /></div>
 </Base>

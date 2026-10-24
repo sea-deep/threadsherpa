@@ -348,6 +348,7 @@ function start(root: HTMLElement) {
   let mobilePane: "rail" | "forum" | "thread" = "forum";
   let narration: "none" | "saved" | "answered" | "solved" = "none";
   let narrationThreadId: string | null = null;
+  let sourceViewed = false;
   let notice: Notice | null = null;
   let fieldError: FieldError | null = null;
   let draft = { title: "", body: "" };
@@ -391,6 +392,7 @@ function start(root: HTMLElement) {
     root.dataset.perspective = perspective;
     root.dataset.mobilePane = mobilePane;
     root.dataset.channel = channel;
+    root.querySelector('[data-open-channels]')?.setAttribute('aria-expanded', String(mobilePane === 'rail'));
 
     if (refs.modeLabel)
       refs.modeLabel.textContent =
@@ -412,6 +414,20 @@ function start(root: HTMLElement) {
       refs.channelLabel.textContent =
         channel === "announcements" ? "#announcements" : "#ask-campfire";
     }
+    const workspaceChannel = root.querySelector<HTMLElement>('[data-workspace-channel]');
+    if (workspaceChannel) workspaceChannel.textContent = channel === 'announcements' ? 'announcements' : 'ask-campfire';
+    const profileRole = root.querySelector<HTMLElement>('[data-profile-role]');
+    if (profileRole) profileRole.textContent = `Exploring as ${perspective}`;
+    const guideProgress = {
+      save: state.knowledge.length > 0,
+      ask: state.threads.some((thread) => thread.origin === 'visitor'),
+      source: sourceViewed,
+    };
+    root.querySelectorAll<HTMLElement>('[data-guide-step]').forEach((step) => {
+      const complete = guideProgress[step.dataset.guideStep as keyof typeof guideProgress];
+      step.classList.toggle('is-complete', complete);
+      step.setAttribute('aria-label', `${step.querySelector('strong')?.textContent}${complete ? ', complete' : ''}`);
+    });
     if (refs.liveStatus) {
       const text = notice?.text ?? "";
       if (refs.liveStatus.textContent !== text)
@@ -442,6 +458,7 @@ function start(root: HTMLElement) {
             "aria-selected",
             String(tab.dataset.toolTab === toolsTab),
           );
+          tab.tabIndex = tab.dataset.toolTab === toolsTab ? 0 : -1;
         });
       const queue = refs.tabs.querySelector<HTMLElement>(
         '[data-count="queue"]',
@@ -1269,6 +1286,7 @@ function start(root: HTMLElement) {
     selectedThreadId = state.threads[0]?.id ?? "thread-update";
     narration = "none";
     narrationThreadId = null;
+    sourceViewed = false;
     notice = null;
     fieldError = null;
     draft = { title: "", body: "" };
@@ -1568,6 +1586,7 @@ function start(root: HTMLElement) {
 
     const source = closest("[data-source-thread]");
     if (source?.dataset.sourceThread) {
+      sourceViewed = true;
       revealSource(
         source.dataset.sourceThread,
         source.dataset.sourceMessage ?? "",
@@ -1725,6 +1744,15 @@ function start(root: HTMLElement) {
 
   root.addEventListener("keydown", (event) => {
     const target = event.target as HTMLElement;
+    if (target.matches('[data-tool-tab]') && ['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) {
+      event.preventDefault();
+      const tabs = Array.from(refs.tabs?.querySelectorAll<HTMLElement>('[data-tool-tab]') ?? []);
+      const index = tabs.indexOf(target);
+      const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      const next = tabs[nextIndex];
+      if (next) setToolsTab(next.dataset.toolTab as 'threads' | 'queue' | 'saved');
+      return;
+    }
     if (
       target.matches("[data-reply-input]") &&
       event.key === "Enter" &&
@@ -1842,6 +1870,7 @@ function start(root: HTMLElement) {
   })();
 
   void (async () => {
+    if (root.dataset.immersive === 'true') return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     if (window.innerWidth < 768) return;
     try {

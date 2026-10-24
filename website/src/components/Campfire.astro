@@ -2,6 +2,8 @@
 import '../styles/campfire.css';
 import { fixtureThreads, sandboxCopy } from '../../../shared/sandbox';
 
+interface Props { immersive?: boolean; }
+const { immersive = false } = Astro.props;
 const threads = fixtureThreads();
 const initial = threads[0];
 const initialMessages = initial?.messages ?? [];
@@ -15,7 +17,7 @@ const time = (iso: string, reference = Date.UTC(2026, 9, 23, 17, 40)) => {
 };
 ---
 
-<section id="playground" class="stage-section" aria-labelledby="campfire-heading">
+<section id="playground" class="stage-section" aria-label={immersive ? 'Campfire interactive sandbox' : undefined} aria-labelledby={immersive ? undefined : 'campfire-heading'}>
   <div class="wrap">
     <div class="stage-rubric">
       <div class="stage-rubric__title">
@@ -32,6 +34,7 @@ const time = (iso: string, reference = Date.UTC(2026, 9, 23, 17, 40)) => {
       data-perspective="moderator"
       data-mobile-pane="forum"
       data-channel="support"
+      data-immersive={immersive ? 'true' : undefined}
     >
       <canvas class="stage__canvas" data-thread-canvas aria-hidden="true"></canvas>
       <div class="stage__poster" aria-hidden="true">
@@ -58,6 +61,13 @@ const time = (iso: string, reference = Date.UTC(2026, 9, 23, 17, 40)) => {
       <p class="sr-only" role="status" aria-live="polite" data-live-status></p>
 
       <div class="stage__frame">
+        {immersive && <nav class="servers" aria-label="Servers">
+          <a class="servers__home" href="/" aria-label="ThreadSherpa home"><img src="/brand/mark.svg" width="28" height="24" alt="" /></a>
+          <span class="servers__divider"></span>
+          <button class="servers__item is-selected" type="button" data-server-home aria-label="Campfire server" aria-current="true"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M13 3c1 5-4 5-2 9 1-1 2-2 2-3 4 3 6 6 4 9a6 6 0 0 1-10-6c0 2 1 3 2 3-1-5 4-6 4-12Z" fill="currentColor" /></svg></button>
+          <a class="servers__item servers__add" href="/setup/" aria-label="Set up your own server"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg></a>
+          <a class="servers__help" href="/setup/" aria-label="Setup guide"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.6"/><path d="M9.5 9a2.5 2.5 0 1 1 4 2c-1 .7-1.5 1-1.5 2.5M12 17h.01" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" /></svg></a>
+        </nav>}
         <header class="stage__bar">
           <button
             class="stage__channels"
@@ -89,6 +99,7 @@ const time = (iso: string, reference = Date.UTC(2026, 9, 23, 17, 40)) => {
             </span>
           </button>
 
+          {immersive && <div class="workspace-channel"><span aria-hidden="true">#</span><strong data-workspace-channel>ask-campfire</strong><span class="workspace-channel__topic">Good questions. Answers that stick.</span></div>}
           <div class="stage__controls">
             <span class="mode-pill" data-mode-pill>
               <span class="mode-pill__dot"></span>
@@ -113,8 +124,9 @@ const time = (iso: string, reference = Date.UTC(2026, 9, 23, 17, 40)) => {
               </svg>
               Back to threads
             </button>
+            {immersive && <div class="community-banner"><span class="community-banner__icon" aria-hidden="true"><svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="m3 19 6-11 4 7 3-5 5 9H3Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/><circle cx="17" cy="5" r="2" fill="currentColor"/></svg></span><strong>A little help goes a long way.</strong><span>Your community, with a memory.</span></div>}
             <div class="rail__group">
-              <span class="rail__label">Channels</span>
+              <span class="rail__label">{immersive ? 'Community' : 'Channels'}</span>
               <button class="rail__link" type="button" data-channel="announcements">
                 <span class="rail__hash" aria-hidden="true">#</span>
                 <span class="rail__name">announcements</span>
@@ -124,14 +136,17 @@ const time = (iso: string, reference = Date.UTC(2026, 9, 23, 17, 40)) => {
                 <span class="rail__name">ask-campfire</span>
               </button>
             </div>
+            {immersive && <div class="sandbox-guide"><h2>Make yourself at home</h2><p>Try the bot in three small steps.</p><ol><li data-guide-step="save"><span class="sandbox-guide__check" aria-hidden="true"></span><div><strong>Save a useful answer</strong><p>Open Sam’s message actions.</p></div></li><li data-guide-step="ask"><span class="sandbox-guide__check" aria-hidden="true"></span><div><strong>Ask it a different way</strong><p>Start a new post to try recall.</p></div></li><li data-guide-step="source"><span class="sandbox-guide__check" aria-hidden="true"></span><div><strong>Follow the source</strong><p>See where the answer came from.</p></div></li></ol></div>}
             <div class="rail__foot">
               <strong>Your sandbox</strong>
               In-memory only. Restart clears it.
               <button class="rail__restart" type="button" data-restart>Restart Campfire</button>
             </div>
+            {immersive && <div class="sandbox-profile"><span class="sandbox-profile__avatar" aria-hidden="true">Y<span></span></span><div><strong>You</strong><span data-profile-role>Exploring as moderator</span></div></div>}
           </nav>
 
           <section class="forum" aria-label="Support forum">
+            {immersive && <div class="forum__intro"><h2>Support threads</h2><p>A good answer starts here.</p></div>}
             <div class="forum__head">
               <div class="search">
                 <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">

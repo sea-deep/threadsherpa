@@ -9,12 +9,14 @@ import Footer from '../components/Footer.astro';
 
 interface Props {
   description?: string;
+  app?: boolean;
 }
 
 const {
+  app = false,
   description = "Save a moderator's answer once. ThreadSherpa uses those facts to write short, sourced replies for the next Discord question. Open source and self-hosted.",
 } = Astro.props;
-const title = 'ThreadSherpa';
+const title = app ? 'Campfire · ThreadSherpa' : 'ThreadSherpa';
 const canonical = new URL(Astro.url.pathname, 'https://threadsherpa.onrender.com');
 const socialImage = 'https://threadsherpa.onrender.com/brand/social-card-1280x630.png';
 const imageAlt = 'ThreadSherpa, a Discord bot for repeat questions. An amber trail guide carries a saved answer in a green backpack.';
@@ -46,7 +48,7 @@ const structuredData = {
     <meta name="application-name" content="ThreadSherpa" />
     <link rel="canonical" href={canonical.href} />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#100F15" />
+    <meta name="theme-color" content={app ? '#1e1f22' : '#100F15'} />
 
     <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
     <link rel="icon" href="/brand/favicon-32.png" sizes="32x32" type="image/png" />
@@ -83,13 +85,13 @@ const structuredData = {
 
     <script type="application/ld+json" set:html={JSON.stringify(structuredData)} />
   </head>
-  <body>
+  <body class:list={{ 'sandbox-app': app }}>
     <a class="skip-link" href="#main">Skip to content</a>
-    <Header />
+    {!app && <Header />}
     <main id="main">
       <slot />
     </main>
-    <Footer />
+    {!app && <Footer />}
 
     <script>
       import '../scripts/site';
